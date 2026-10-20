@@ -44,6 +44,7 @@ class ColorMixConnectorConfig(ConnectorBaseConfig):
 def build_features(config: ColorMixConnectorConfig) -> list[sila.Feature]:
     """Build the demo and the Features it uses, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     reader = FluentInfiniteReader(backend, config.infinite)
     cameras = deck_cameras(config.cameras, backend)
     liquid = LiquidHandling(backend)

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A lock shared by every server on the Fluent PC (`fluent.shared_lock`), so that only one server at a time sends to
+  FluentControl or keeps a run open; others are refused with the name of the holder, and `Fluent - Status` shows it.
+
+### Added
+
 - One server per device next to the combined one (`apps/<app>.py`, each with its own config class, fixed UUID and
   port): `fluent780` (the Fluent itself, 50062), `infinite` (50063, now with `Status`), `bioshake` (50064),
   `inheco_incubator` (50065), `cplc` (50066), `incubator1` (50067) and `colormix_demo` (50068), with

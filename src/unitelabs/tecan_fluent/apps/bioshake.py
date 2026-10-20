@@ -36,6 +36,7 @@ class BioShakeConnectorConfig(ConnectorBaseConfig):
 def build_features(config: BioShakeConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the BioShake, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     return [BioShake(backend), Status(backend)]
 
 

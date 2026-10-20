@@ -40,7 +40,8 @@
     "definitions": {
       "ssh_target": "local",
       "local_dir": "C:\\Users\\Tecan\\OFML\\connector_state"
-    }
+    },
+    "shared_lock": "C:\\Users\\Tecan\\OFML\\state\\fluentcontrol.lock"
   },
   "infinite": {
     "reader_location": "InfiniteM200_New",

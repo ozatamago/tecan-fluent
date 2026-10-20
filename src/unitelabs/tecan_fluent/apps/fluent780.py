@@ -44,6 +44,7 @@ class Fluent780ConnectorConfig(ConnectorBaseConfig):
 def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the Fluent, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     tracker = labware_tracker(config.plates, config.fluent)
     cameras = deck_cameras(config.cameras, backend)
     return [

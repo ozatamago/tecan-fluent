@@ -65,9 +65,12 @@ Feature identifiers are `jp.riken.bdr/<category>/<identifier>/v1` (the table wit
 [docs/feature_identifiers.md](docs/feature_identifiers.md)). Feature definitions are the same in every server, so
 clients only need to change the address. The commands of each Feature are listed under [Usage](#usage).
 
-**Do not run the combined server and a device server that talks to FluentControl at the same time**: each server
-enforces "one operation at a time" only for itself, so they do not know about each other's operations and could end
-someone else's run through the UniteLabs connector's "last opened channel".
+**Several servers on one Fluent PC share FluentControl through a lock.** Each server enforces "one operation at a
+time" for itself; across servers, the file set in `fluent.shared_lock` (`C:\Users\Tecan\OFML\state\fluentcontrol.lock`
+in every Fluent PC example config, and in the stand-alone ODTC server) is held while a server sends to FluentControl
+and for as long as it keeps a run open (StartRun to EndRun). A command on another server is refused meanwhile with
+the name of the server and operation that hold it, and `Fluent - Status` shows it (`Ready` false, `CurrentOperation`
+"another server: ..."). The operating system releases the lock when a server process ends.
 
 ### Package layout
 

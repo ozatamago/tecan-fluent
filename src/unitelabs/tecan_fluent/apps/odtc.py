@@ -40,6 +40,7 @@ class OdtcConnectorConfig(ConnectorBaseConfig):
 def build_features(config: OdtcConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the ODTC, sharing one backend (one operation at a time)."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     return [Door(backend), Methods(backend), Temperatures(backend), Status(backend)]
 
 

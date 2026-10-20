@@ -40,7 +40,8 @@
     "definitions": {
       "ssh_target": "local",
       "local_dir": "C:\\Users\\Tecan\\OFML\\state\\fluent780"
-    }
+    },
+    "shared_lock": "C:\\Users\\Tecan\\OFML\\state\\fluentcontrol.lock"
   },
   "cameras": {
     "enabled": true

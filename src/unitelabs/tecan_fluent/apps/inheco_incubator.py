@@ -36,6 +36,7 @@ class InhecoIncubatorConnectorConfig(ConnectorBaseConfig):
 def build_features(config: InhecoIncubatorConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the Inheco shaking incubator, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     return [ShakingIncubator(backend), Status(backend)]
 
 

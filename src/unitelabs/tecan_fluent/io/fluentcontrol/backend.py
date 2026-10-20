@@ -30,6 +30,7 @@ from unitelabs.cdk.config import Config
 from ..odtc.macros import odtc_macro_xml
 from .definitions import DefinitionCheckFailed, DefinitionsConfig, Preflight
 from .errors import BackendError
+from .shared_lock import SharedLock
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +94,17 @@ class FluentBackendConfig(Config):
     """Name of the channel OFML_ApiHost opens. Commands are sent only after a channel with this name is open."""
     definitions: DefinitionsConfig = dataclasses.field(default_factory=DefinitionsConfig)
     """Checking and recording of the FluentControl definitions each operation uses."""
+    shared_lock: str = ""
+    """Lock file shared by every server on the Fluent PC (e.g. C:\\Users\\Tecan\\OFML\\state\\fluentcontrol.lock), so
+    that only one server at a time sends to FluentControl or keeps a run open. Empty: no lock (one server only)."""
 
 
 class FluentControlBackend:
     def __init__(self, config: FluentBackendConfig):
         self.config = config
         self._lock = asyncio.Lock()
+        self.shared = SharedLock(config.shared_lock) if config.shared_lock else None
+        """The lock shared with the other servers on the Fluent PC (None when not configured)."""
         self._client = None
         self.current_operation = ""
         """Description of the operation currently running (e.g. "ODTC: SiLA-ODTC_OpenDoor"). Empty when idle."""
@@ -394,11 +400,16 @@ class FluentControlBackend:
         if self._lock.locked():
             raise BackendError(f"Another operation is running ({self.current_operation})")
         async with self._lock:
+            if self.shared is not None:
+                self.shared.acquire(what)  # refuses while another server on the Fluent PC uses FluentControl
             self.current_operation = what
             try:
                 yield
             finally:
                 self.current_operation = ""
+                # a run held open by StartRun keeps the lock until EndRun
+                if self.shared is not None and self._session is None:
+                    self.shared.release()
 
     # ---- Temperature (the ReadActualTemperature result is not returned to FluentControl; only the driver log has it)
     def _ssh_ps(self, args: str) -> str:
@@ -454,6 +465,20 @@ class FluentControlBackend:
     @property
     def busy(self) -> bool:
         return self._lock.locked()
+
+    @property
+    def lock_owner(self) -> str:
+        return self.shared.owner if self.shared is not None else ""
+
+    @lock_owner.setter
+    def lock_owner(self, name: str) -> None:
+        """The name other servers see when this one holds the shared lock (set to the SiLA server name)."""
+        if self.shared is not None:
+            self.shared.owner = name
+
+    def other_server(self) -> str:
+        """The other server on the Fluent PC that uses FluentControl now ("" if none or no shared lock)."""
+        return self.shared.other_holder() if self.shared is not None else ""
 
     def _status(self) -> tuple[str, list[str]]:
         return self._state(), self._active_dialogs()

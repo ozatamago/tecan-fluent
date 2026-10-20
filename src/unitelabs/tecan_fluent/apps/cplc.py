@@ -36,6 +36,7 @@ class CplcConnectorConfig(ConnectorBaseConfig):
 def build_features(config: CplcConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the CPLC, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     return [CoolingHeatingPlates(backend), Status(backend)]
 
 

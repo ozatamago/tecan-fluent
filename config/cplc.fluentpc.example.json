@@ -40,6 +40,7 @@
     "definitions": {
       "ssh_target": "local",
       "local_dir": "C:\\Users\\Tecan\\OFML\\state\\cplc"
-    }
+    },
+    "shared_lock": "C:\\Users\\Tecan\\OFML\\state\\fluentcontrol.lock"
   }
 }

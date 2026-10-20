@@ -40,6 +40,7 @@ class InfiniteConnectorConfig(ConnectorBaseConfig):
 def build_features(config: InfiniteConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the reader, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     reader = FluentInfiniteReader(backend, config.infinite)
     return [Tray(reader), Absorbance(reader), PlateHandling(reader), Status(backend)]
 

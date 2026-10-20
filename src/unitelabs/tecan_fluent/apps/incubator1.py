@@ -36,6 +36,7 @@ class Incubator1ConnectorConfig(ConnectorBaseConfig):
 def build_features(config: Incubator1ConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the Incubator1, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
+    backend.lock_owner = config.sila_server.name
     return [Incubator1(backend), Status(backend)]
 
 
