@@ -4,7 +4,7 @@ Extracted with `scripts/extract_gui_statements.py` into `tests/fixtures/gui_stat
 `index.tsv` gives the script, line and main arguments of each). Device macros are in `tests/fixtures/gui_macros/`.
 
 `tests/fixtures/liha_verified/` holds the pipetting XML that ran on the instrument in August 2026 (water, 1 and 8
-channels). `tests/test_gui_statements.py` checks that it has exactly the same structure as the GUI statements, so the
+channels). `tests/io/test_gui_statements.py` checks that it has exactly the same structure as the GUI statements, so the
 stage-4 commands only need to fill in values.
 
 ## Statements and where their arguments are
