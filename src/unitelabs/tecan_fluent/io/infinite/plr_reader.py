@@ -18,7 +18,7 @@ import time
 
 from unitelabs.cdk.config import Config
 
-from ..fluent_backend import BackendError
+from ..fluentcontrol.errors import BackendError
 from .asc import ROWS, AscResult
 
 logger = logging.getLogger(__name__)

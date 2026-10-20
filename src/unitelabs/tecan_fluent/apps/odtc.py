@@ -9,11 +9,11 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
-from ..features.door_controller import Door
-from ..features.method_controller import Methods
-from ..features.status_controller import Status
-from ..features.temperature_controller import Temperatures
-from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
+from ..features.fluent.status import Status
+from ..features.odtc.door import Door
+from ..features.odtc.methods import Methods
+from ..features.odtc.temperatures import Temperatures
+from ..io.fluentcontrol.backend import FluentBackendConfig, FluentOdtcBackend
 
 
 @dataclasses.dataclass

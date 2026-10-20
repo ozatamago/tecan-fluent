@@ -12,7 +12,8 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
-from ..features.infinite import Absorbance, Tray
+from ..features.infinite.absorbance import Absorbance
+from ..features.infinite.tray import Tray
 from ..io.infinite.plr_reader import PyLabRobotInfiniteReader, UsbInfiniteConfig
 
 

@@ -16,9 +16,10 @@ import time
 
 from unitelabs.cdk.config import Config
 
-from ..fluent_backend import BackendError, FluentOdtcBackend
+from ..fluent.gripper.statements import add_labware_xml, remove_labware_xml, rga_xml
+from ..fluentcontrol.backend import BackendError, FluentOdtcBackend
 from .asc import AscResult, parse_asc
-from .xml import add_labware_xml, magellan_xml, remove_labware_xml, rga_xml
+from .xml import magellan_xml
 
 logger = logging.getLogger(__name__)
 

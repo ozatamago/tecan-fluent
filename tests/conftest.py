@@ -4,7 +4,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _offline(tmp_path, monkeypatch):
     """Tests never reach the Fluent PC, and dry-run records go to a temporary home folder."""
-    from unitelabs.tecan_fluent.io.definitions import DefinitionCheckFailed, FluentPc
+    from unitelabs.tecan_fluent.io.fluentcontrol.definitions import DefinitionCheckFailed, FluentPc
 
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))  # what expanduser uses on Windows (the Fluent PC)
@@ -26,7 +26,7 @@ def _offline(tmp_path, monkeypatch):
     ):
         monkeypatch.setattr(FluentPc, name, offline)
 
-    from unitelabs.tecan_fluent.io.deck_cameras import CameraFailed, DeckCameras
+    from unitelabs.tecan_fluent.io.fluent.camera.deck_cameras import CameraFailed, DeckCameras
 
     def cameras_offline(*_a, **_k):
         raise CameraFailed("offline (tests)")

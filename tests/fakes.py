@@ -1,8 +1,26 @@
-"""Stand-ins for the Fluent PC and the FluentControl definitions, shared by the tests in features/ and io/."""
+"""Stand-ins for the Fluent PC and the FluentControl definitions, and helpers shared by the tests in features/ and
+io/."""
 
 import hashlib
+import pathlib
 
-from unitelabs.tecan_fluent.apps.fluent780 import Fluent780ConnectorConfig, build_features
+from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780ConnectorConfig, build_features
+
+FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
+
+
+def macro_obj(xml: str) -> list[str]:
+    """Extract only the <Object> in the ScriptGroup, leading whitespace stripped (the form of the GUI script
+    templates)."""
+    lines = [ln.strip() for ln in xml.splitlines()]
+    return lines[lines.index(next(ln for ln in lines if ln.startswith("<Object "))) :][:5]
+
+
+def gui_macro(name: str) -> list[str]:
+    """A legacy driver macro of the GUI scripts 01-07 (tests/fixtures/gui_macros), line by line."""
+    return [
+        ln.strip() for ln in (FIXTURES / "gui_macros" / name).read_text(encoding="utf-8").splitlines() if ln.strip()
+    ]
 
 
 def vx(name, body):
