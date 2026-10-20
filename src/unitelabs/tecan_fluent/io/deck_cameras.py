@@ -8,16 +8,16 @@ moving anything (found 2026-10-16).
 - Center (234500007): wide angle, the whole deck
 - Right (242701126): the right of the deck (hotel, incubators, ODTC)
 
-Still images: scripts/windows/camera_shot.ps1 (in C:\\Users\\Tecan\\OFML\\tools) takes one image per camera and writes a PNG
-plus a small JPEG preview. They go to OFML\\records\\images\\<date>\\ for single images, and
+Still images: scripts/windows/camera_shot.ps1 (in C:\\Users\\Tecan\\OFML\\tools) takes one image per camera and writes
+a PNG plus a small JPEG preview. They go to OFML\\records\\images\\<date>\\ for single images, and
 OFML\\records\\runs\\<session>\\images\\ at StartRun ("start") and EndRun ("end").
 
-Video: scripts/windows/camera_videos.ps1 records any combination of cameras at once until StopRecording, about two frames per
-second per camera with all three (the cameras share one 1 Gbit/s link, so they are triggered one after another). While
-it records, it is the only program that opens the cameras: still images (TakeImage, and the images at StartRun and
-EndRun) are then taken by the recorder, without stopping the video. StopRecording turns each camera's frames into
-video.mp4 next to them on the Fluent PC and deletes the frames. Videos go to <session>\\videos\\<time>\\ while a run is
-open, otherwise to OFML\\records\\videos\\<date>\\<time>\\.
+Video: scripts/windows/camera_videos.ps1 records any combination of cameras at once until StopRecording, about two
+frames per second per camera with all three (the cameras share one 1 Gbit/s link, so they are triggered one after
+another). While it records, it is the only program that opens the cameras: still images (TakeImage, and the images
+at StartRun and EndRun) are then taken by the recorder, without stopping the video. StopRecording turns each camera's
+frames into video.mp4 next to them on the Fluent PC and deletes the frames. Videos go to <session>\\videos\\<time>\\
+while a run is open, otherwise to OFML\\records\\videos\\<date>\\<time>\\.
 """
 
 import dataclasses
@@ -48,7 +48,8 @@ class DeckCameraConfig(Config):
 
     enabled: bool = True
     cameras: dict = dataclasses.field(
-        default_factory=lambda: {"Left": "242701174", "Center": "234500007", "Right": "242701126"})
+        default_factory=lambda: {"Left": "242701174", "Center": "234500007", "Right": "242701126"}
+    )
     """Camera name -> serial number."""
     script: str = r"C:\Users\Tecan\OFML\tools\camera_shot.ps1"
     video_script: str = r"C:\Users\Tecan\OFML\tools\camera_videos.ps1"
@@ -67,7 +68,9 @@ def parse_shot_lines(text: str) -> list[dict]:
     for line in text.replace("\r", "").splitlines():
         parts = line.split(" ")
         if parts[0] == "OK" and len(parts) >= 5:
-            results.append({"camera": parts[1], "status": "ok", "image": parts[2], "preview": parts[3], "size": parts[4]})
+            results.append(
+                {"camera": parts[1], "status": "ok", "image": parts[2], "preview": parts[3], "size": parts[4]}
+            )
         elif parts[0] == "ERROR" and len(parts) >= 2:
             results.append({"camera": parts[1], "status": "error", "error": " ".join(parts[2:])})
     return results
@@ -135,8 +138,10 @@ class DeckCameras:
             if rec:
                 return self._request_stills(rec, names, out_dir, tag)
             spec = ",".join(f"{n}={self.config.cameras[n]}" for n in names)
-            text = self._ssh(f'powershell -NoProfile -ExecutionPolicy Bypass -File "{self.config.script}" '
-                             f'-Cameras "{spec}" -OutDir "{out_dir}"' + (f' -Tag "{tag}"' if tag else ""))
+            text = self._ssh(
+                f'powershell -NoProfile -ExecutionPolicy Bypass -File "{self.config.script}" '
+                f'-Cameras "{spec}" -OutDir "{out_dir}"' + (f' -Tag "{tag}"' if tag else "")
+            )
         results = parse_shot_lines(text)
         if not results:
             raise CameraFailed("The camera script printed nothing")
@@ -146,11 +151,14 @@ class DeckCameras:
         req = f"{rec['out_dir']}\\requests\\{uuid.uuid4().hex[:12]}"
         self._put(f"{','.join(names)}|{out_dir}|{tag}", req + ".tmp")
         # Renamed only when complete, so the recorder never reads half a request
-        text = self._ps(f"Rename-Item '{req}.tmp' '{req.rsplit(chr(92), 1)[1]}.req'; "
-                        f"$t = [Diagnostics.Stopwatch]::StartNew(); "
-                        f"while (-not (Test-Path '{req}.done') -and $t.Elapsed.TotalSeconds -lt 30) {{ Start-Sleep -Milliseconds 100 }}; "
-                        f"if (Test-Path '{req}.done') {{ Get-Content '{req}.done'; Remove-Item '{req}.done' }} "
-                        f"else {{ Remove-Item '{req}.req' -ErrorAction SilentlyContinue; 'TIMEOUT' }}")
+        text = self._ps(
+            f"Rename-Item '{req}.tmp' '{req.rsplit(chr(92), 1)[1]}.req'; "
+            f"$t = [Diagnostics.Stopwatch]::StartNew(); "
+            f"while (-not (Test-Path '{req}.done') -and $t.Elapsed.TotalSeconds -lt 30) "
+            f"{{ Start-Sleep -Milliseconds 100 }}; "
+            f"if (Test-Path '{req}.done') {{ Get-Content '{req}.done'; Remove-Item '{req}.done' }} "
+            f"else {{ Remove-Item '{req}.req' -ErrorAction SilentlyContinue; 'TIMEOUT' }}"
+        )
         if "TIMEOUT" in text:
             raise CameraFailed("The recorder did not answer within 30 s")
         results = parse_shot_lines(text)
@@ -174,8 +182,10 @@ class DeckCameras:
         if self.dry_run or not self.config.enabled:
             return None
         f = self.config.recorder_state
-        text = self._ps(f"if (Test-Path '{f}') {{ $s = Get-Content '{f}' -Raw; "
-                        f"if (Get-Process -Id ($s | ConvertFrom-Json).pid -ErrorAction SilentlyContinue) {{ $s }} }}")
+        text = self._ps(
+            f"if (Test-Path '{f}') {{ $s = Get-Content '{f}' -Raw; "
+            f"if (Get-Process -Id ($s | ConvertFrom-Json).pid -ErrorAction SilentlyContinue) {{ $s }} }}"
+        )
         text = text.strip().lstrip("\ufeff")
         if not text:
             return None
@@ -204,9 +214,12 @@ class DeckCameras:
             if rec:
                 raise CameraFailed(f"Already recording {', '.join(rec['record'])} into {rec['out_dir']}; stop it first")
             spec = ",".join(f"{n}={s}" for n, s in self.config.cameras.items())
-            cmd = (f'powershell -NoProfile -ExecutionPolicy Bypass -File "{self.config.video_script}" -Cameras "{spec}" '
-                   f'-Record "{",".join(names)}" -OutDir "{out_dir}" -Fps {fps:g} -MaxSeconds {self.config.max_recording_s:g} '
-                   f'-StateFile "{self.config.recorder_state}"')
+            cmd = (
+                f'powershell -NoProfile -ExecutionPolicy Bypass -File "{self.config.video_script}" -Cameras "{spec}" '
+                f'-Record "{",".join(names)}" -OutDir "{out_dir}" -Fps {fps:g} '
+                f"-MaxSeconds {self.config.max_recording_s:g} "
+                f'-StateFile "{self.config.recorder_state}"'
+            )
             # The recorder keeps running on the Fluent PC even if this SSH connection goes (tested 2026-10-16)
             proc = remote.popen(self.ssh_target, cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             lines: list[str] = []
@@ -233,11 +246,16 @@ class DeckCameras:
         if not rec:
             raise CameraFailed("Not recording")
         out = rec["out_dir"]
-        text = self._ps(f"New-Item -ItemType File -Force '{out}\\stop' | Out-Null; "
-                        f"$t = [Diagnostics.Stopwatch]::StartNew(); "
-                        f"while ((Get-Process -Id {int(rec['pid'])} -ErrorAction SilentlyContinue) -and $t.Elapsed.TotalSeconds -lt 120) {{ Start-Sleep -Milliseconds 200 }}; "
-                        f"if (Get-Process -Id {int(rec['pid'])} -ErrorAction SilentlyContinue) {{ 'STILL RUNNING' }} "
-                        f"else {{ Remove-Item '{out}\\stop'; Remove-Item '{out}\\requests' -Recurse -ErrorAction SilentlyContinue }}", timeout=180)
+        text = self._ps(
+            f"New-Item -ItemType File -Force '{out}\\stop' | Out-Null; "
+            f"$t = [Diagnostics.Stopwatch]::StartNew(); "
+            f"while ((Get-Process -Id {int(rec['pid'])} -ErrorAction SilentlyContinue) "
+            f"-and $t.Elapsed.TotalSeconds -lt 120) {{ Start-Sleep -Milliseconds 200 }}; "
+            f"if (Get-Process -Id {int(rec['pid'])} -ErrorAction SilentlyContinue) {{ 'STILL RUNNING' }} "
+            f"else {{ Remove-Item '{out}\\stop'; "
+            f"Remove-Item '{out}\\requests' -Recurse -ErrorAction SilentlyContinue }}",
+            timeout=180,
+        )
         if "STILL RUNNING" in text:
             raise CameraFailed("The recorder did not stop within 120 s")
         if self._recorder is not None:
@@ -250,13 +268,21 @@ class DeckCameras:
         return [self.make_mp4(f"{out}\\{name}", name) for name in rec["record"]]
 
     def make_mp4(self, folder: str, camera: str = "") -> dict:
-        """frame_*.jpg in folder on the Fluent PC -> folder\\video.mp4; the frames are deleted once the copy is checked."""
+        """frame_*.jpg in folder on the Fluent PC -> folder\\video.mp4; the frames are deleted once the copy is
+        checked."""
         import imageio_ffmpeg
 
         zip_remote = f"{self.config.work_dir}\\frames_{uuid.uuid4().hex[:8]}.zip"
-        count = self._ps(f"$f = @(Get-ChildItem '{folder}' -Filter frame_*.jpg); if ($f.Count) "
-                         f"{{ Compress-Archive -Path '{folder}\\frame_*.jpg' -DestinationPath '{zip_remote}' -Force }}; $f.Count",
-                         timeout=600).strip().splitlines()[-1]
+        count = (
+            self._ps(
+                f"$f = @(Get-ChildItem '{folder}' -Filter frame_*.jpg); if ($f.Count) "
+                f"{{ Compress-Archive -Path '{folder}\\frame_*.jpg' -DestinationPath '{zip_remote}' -Force }}; "
+                "$f.Count",
+                timeout=600,
+            )
+            .strip()
+            .splitlines()[-1]
+        )
         if count == "0":
             return {"camera": camera, "status": "no frames", "folder": folder}
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="ofml-video-"))
@@ -268,16 +294,41 @@ class DeckCameras:
                 z.extractall(tmp / "frames")
             fps = frames_per_second((tmp / "frames.txt").read_text())
             mp4 = tmp / "video.mp4"
-            out = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-y", "-framerate", f"{fps}",
-                                  "-i", str(tmp / "frames" / "frame_%04d.jpg"), "-vf", "scale=1280:-2",
-                                  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "25", str(mp4)],
-                                 capture_output=True, timeout=1800)
+            out = subprocess.run(
+                [
+                    imageio_ffmpeg.get_ffmpeg_exe(),
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-framerate",
+                    f"{fps}",
+                    "-i",
+                    str(tmp / "frames" / "frame_%04d.jpg"),
+                    "-vf",
+                    "scale=1280:-2",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    "25",
+                    str(mp4),
+                ],
+                capture_output=True,
+                timeout=1800,
+            )
             if out.returncode != 0:
                 raise CameraFailed(f"ffmpeg failed: {out.stderr.decode(errors='replace')[:300]}")
             self._get_back(mp4, f"{folder}\\video.mp4")
             self._ps(f"Remove-Item '{folder}\\frame_*.jpg'")
-            return {"camera": camera, "status": "ok", "video": f"{folder}\\video.mp4", "frames": int(count), "fps": fps,
-                    "bytes": mp4.stat().st_size}
+            return {
+                "camera": camera,
+                "status": "ok",
+                "video": f"{folder}\\video.mp4",
+                "frames": int(count),
+                "fps": fps,
+                "bytes": mp4.stat().st_size,
+            }
         finally:
             shutil.rmtree(tmp, ignore_errors=True)  # nothing of it is kept on this computer
 

@@ -22,13 +22,11 @@ logged SC_ERROR_NONE.
 The allowed temperature ranges are limits this connector imposes for safety (not the device specifications).
 """
 
-import dataclasses
-
 from unitelabs.cdk import sila
 
 from ..io.fluent_backend import BackendError, FluentOdtcBackend
-from .infinite import _with_progress
 from ..io.infinite.xml import _esc, wrap
+from .infinite import _with_progress
 
 
 def legacy_macro_xml(module: str, name: str, settings: str | None = None, execution_time: str = "PT2S") -> str:
@@ -39,13 +37,15 @@ def legacy_macro_xml(module: str, name: str, settings: str | None = None, execut
     InhecoIncubator_SetTemp in Sub_Cleanup uses PT1M40S.
     """
     es = "<ExecutionSettings />" if settings is None else f"<ExecutionSettings>{_esc(settings)}</ExecutionSettings>"
-    return wrap('<Object Type="Tecan.VisionX.ApplicationDriver.LegacyDriverMacro">\n'
-                f'  <LegacyDriverMacro Version="1" Name="{name}" ModuleName="{module}"'
-                f' ExecutionTime="{execution_time}" IsBreakpoint="false"'
-                ' IsDisabledForExecution="false" LineNumber="0">\n'
-                f'    {es}\n'
-                '  </LegacyDriverMacro>\n'
-                '</Object>')
+    return wrap(
+        '<Object Type="Tecan.VisionX.ApplicationDriver.LegacyDriverMacro">\n'
+        f'  <LegacyDriverMacro Version="1" Name="{name}" ModuleName="{module}"'
+        f' ExecutionTime="{execution_time}" IsBreakpoint="false"'
+        ' IsDisabledForExecution="false" LineNumber="0">\n'
+        f"    {es}\n"
+        "  </LegacyDriverMacro>\n"
+        "</Object>"
+    )
 
 
 def _num(value: float, decimals: int | None = None) -> str:
@@ -65,8 +65,11 @@ def inheco_incubator_set_temp_xml(temperature: float, execution_time: str = "PT2
 
 
 def mtc_set_temperature_xml(slot: int, enabled: bool, temperature: float) -> str:
-    return legacy_macro_xml("inhecoMTC", "inhecoMTC_SetTemperature",
-                            f"{int(slot)},{'True' if enabled else 'False'},{_num(temperature, 1)},0")
+    return legacy_macro_xml(
+        "inhecoMTC",
+        "inhecoMTC_SetTemperature",
+        f"{int(slot)},{'True' if enabled else 'False'},{_num(temperature, 1)},0",
+    )
 
 
 def incubator1_set_temperature_xml(temperature: float) -> str:
@@ -183,7 +186,9 @@ class BioShakeController(sila.Feature):
           Speed: Shaking speed in rpm: 1000, 1200, 1400, 1600, 1800 or 2000 (the choices of the GUI scripts).
         """
         if speed not in BIOSHAKE_SPEEDS:
-            raise TemperatureSettingFailed(f"Speed must be one of {', '.join(map(str, BIOSHAKE_SPEEDS))} rpm (the GUI choices)")
+            raise TemperatureSettingFailed(
+                f"Speed must be one of {', '.join(map(str, BIOSHAKE_SPEEDS))} rpm (the GUI choices)"
+            )
         await _send(self.backend, f"BioShake: ShakeOn {speed} rpm", bioshake_shake_on_xml(speed), status)
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
@@ -214,8 +219,12 @@ class ShakingIncubatorController(sila.Feature):
           Temperature: Target temperature in degrees Celsius (20 to 60 in this connector). 03 uses 37, cleanup 25.
         """
         _check(temperature, self.LOW, self.HIGH, "The Inheco shaking incubator")
-        await _send(self.backend, f"InhecoIncubator: SetTemp {temperature:g}",
-                    inheco_incubator_set_temp_xml(temperature), status)
+        await _send(
+            self.backend,
+            f"InhecoIncubator: SetTemp {temperature:g}",
+            inheco_incubator_set_temp_xml(temperature),
+            status,
+        )
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
     async def close(self, *, status: sila.Status) -> None:
@@ -233,7 +242,9 @@ class ShakingIncubatorController(sila.Feature):
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
     async def shake_off(self, *, status: sila.Status) -> None:
         """Stop shaking. MOVES."""
-        await _send(self.backend, "InhecoIncubator: ShakeOff", inheco_incubator_macro_xml("InhecoIncubator_ShakeOff"), status)
+        await _send(
+            self.backend, "InhecoIncubator: ShakeOff", inheco_incubator_macro_xml("InhecoIncubator_ShakeOff"), status
+        )
 
 
 class TemperaturePositionController(sila.Feature):
@@ -267,8 +278,12 @@ class TemperaturePositionController(sila.Feature):
         """
         self._slot(slot)
         _check(temperature, self.LOW, self.HIGH, "The temperature position (inhecoMTC)")
-        await _send(self.backend, f"inhecoMTC: slot {slot} on {temperature:.1f}",
-                    mtc_set_temperature_xml(slot, True, temperature), status)
+        await _send(
+            self.backend,
+            f"inhecoMTC: slot {slot} on {temperature:.1f}",
+            mtc_set_temperature_xml(slot, True, temperature),
+            status,
+        )
         self._last[slot] = temperature
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
@@ -282,7 +297,9 @@ class TemperaturePositionController(sila.Feature):
         self._slot(slot)
         # Switching off still sends a temperature (same form as the GUI scripts): the last set value, else 25.0
         temperature = self._last.get(slot, 25.0)
-        await _send(self.backend, f"inhecoMTC: slot {slot} off", mtc_set_temperature_xml(slot, False, temperature), status)
+        await _send(
+            self.backend, f"inhecoMTC: slot {slot} off", mtc_set_temperature_xml(slot, False, temperature), status
+        )
 
 
 class Incubator1Controller(sila.Feature):
@@ -307,8 +324,12 @@ class Incubator1Controller(sila.Feature):
           Temperature: Target temperature in degrees Celsius (20 to 50 in this connector).
         """
         _check(temperature, self.LOW, self.HIGH, "Incubator1")
-        await _send(self.backend, f"Incubator1: SetTemperature {temperature:g}",
-                    incubator1_set_temperature_xml(temperature), status)
+        await _send(
+            self.backend,
+            f"Incubator1: SetTemperature {temperature:g}",
+            incubator1_set_temperature_xml(temperature),
+            status,
+        )
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
     async def close_door(self, *, status: sila.Status) -> None:
@@ -325,7 +346,9 @@ class Incubator1Controller(sila.Feature):
         """
         if not 1.0 <= frequency <= 8.5:
             raise TemperatureSettingFailed("Incubator1 shaking must be 1.0 to 8.5 Hz (the driver's range)")
-        await _send(self.backend, f"Incubator1: StartShaker {frequency:g} Hz", incubator1_start_shaker_xml(frequency), status)
+        await _send(
+            self.backend, f"Incubator1: StartShaker {frequency:g} Hz", incubator1_start_shaker_xml(frequency), status
+        )
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
     async def stop_shaker(self, *, status: sila.Status) -> None:

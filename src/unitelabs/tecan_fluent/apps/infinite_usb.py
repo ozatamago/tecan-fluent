@@ -16,7 +16,6 @@ from ..features.infinite import AbsorbanceReader, TrayController
 from ..io.infinite.plr_reader import PyLabRobotInfiniteReader, UsbInfiniteConfig
 
 
-
 @dataclasses.dataclass
 class InfiniteUsbConnectorConfig(ConnectorBaseConfig):
     """Configuration for a stand-alone Infinite 200 PRO connected over USB."""

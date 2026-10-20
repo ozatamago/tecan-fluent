@@ -4,8 +4,8 @@ import asyncio
 import pathlib
 
 import pytest
-from fakes import _S, _setup
 
+from fakes import _S, _setup
 from unitelabs.tecan_fluent.features.liquid_handling import (
     LiquidHandlingFailed,
     drop_tips_xml,
@@ -24,32 +24,64 @@ def obj(xml: str) -> list[str]:
     start = next(i for i, ln in enumerate(lines) if ln.startswith("<Object "))
     end = max(i for i, ln in enumerate(lines) if ln == "</Object>")
     # "&gt;" and ">" are the same text in XML (the GUI writes "&gt;", the August XML had ">")
-    return [ln.replace("&gt;", ">") for ln in lines[start:end + 1] if not ln.startswith("<LineNumber>")]
+    return [ln.replace("&gt;", ">") for ln in lines[start : end + 1] if not ln.startswith("<LineNumber>")]
 
 
 def ref(path: str) -> list[str]:
     return obj((FIX / path).read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize(("xml", "fixture"), [
-    (get_tips_xml("FCA, 200ul SBS", [1]), "liha_verified/gettips_1ch.xml"),
-    (get_tips_xml("FCA, 1000ul SBS", list(range(1, 9))), "liha_verified/gettips_8ch_1000.xml"),
-    (pipetting_xml("Aspirate", "1.5ml Sarstedt[001]", ["A1"], [20], "Water Free Multi", [1], 4, 6), "liha_verified/aspirate_1ch.xml"),
-    (pipetting_xml("Dispense", "OFML_TestPlate", ["A1"], [20], "Water Free Multi", [1], 8, 12), "liha_verified/dispense_1ch.xml"),
-    (pipetting_xml("Mix", "OFML_TestPlate", ["A1"], [15], "Water Mix_1", [1], 8, 12, cycles=5), "liha_verified/mix_1ch.xml"),
-    (pipetting_xml("Aspirate", "4 Well SBS Trough[001]", ["A1"] * 8, [960] * 8, "Water Free Multi", list(range(1, 9)), 1, 4),
-     "liha_verified/asp_trough_8ch.xml"),
-    (pipetting_xml("Dispense", "96 Well Flat_Custom[001]", [f"{r}1" for r in "ABCDEFGH"], [150] * 8, "Water Free Multi",
-                   list(range(1, 9)), 8, 12), "liha_verified/dis_flat_col1.xml"),
-    (drop_tips_xml(list(range(1, 9))), "gui_statements/LihaDropTipsScriptCommandDataV2_3.xml"),
-    (move_arm_xml("100ml_Custom_1", "A1", list(range(1, 9)), 1, 1), "fluentcontrol_scripts/movearm_airfca_leakage_test.xml"),
-])
+@pytest.mark.parametrize(
+    ("xml", "fixture"),
+    [
+        (get_tips_xml("FCA, 200ul SBS", [1]), "liha_verified/gettips_1ch.xml"),
+        (get_tips_xml("FCA, 1000ul SBS", list(range(1, 9))), "liha_verified/gettips_8ch_1000.xml"),
+        (
+            pipetting_xml("Aspirate", "1.5ml Sarstedt[001]", ["A1"], [20], "Water Free Multi", [1], 4, 6),
+            "liha_verified/aspirate_1ch.xml",
+        ),
+        (
+            pipetting_xml("Dispense", "OFML_TestPlate", ["A1"], [20], "Water Free Multi", [1], 8, 12),
+            "liha_verified/dispense_1ch.xml",
+        ),
+        (
+            pipetting_xml("Mix", "OFML_TestPlate", ["A1"], [15], "Water Mix_1", [1], 8, 12, cycles=5),
+            "liha_verified/mix_1ch.xml",
+        ),
+        (
+            pipetting_xml(
+                "Aspirate", "4 Well SBS Trough[001]", ["A1"] * 8, [960] * 8, "Water Free Multi", list(range(1, 9)), 1, 4
+            ),
+            "liha_verified/asp_trough_8ch.xml",
+        ),
+        (
+            pipetting_xml(
+                "Dispense",
+                "96 Well Flat_Custom[001]",
+                [f"{r}1" for r in "ABCDEFGH"],
+                [150] * 8,
+                "Water Free Multi",
+                list(range(1, 9)),
+                8,
+                12,
+            ),
+            "liha_verified/dis_flat_col1.xml",
+        ),
+        (drop_tips_xml(list(range(1, 9))), "gui_statements/LihaDropTipsScriptCommandDataV2_3.xml"),
+        (
+            move_arm_xml("100ml_Custom_1", "A1", list(range(1, 9)), 1, 1),
+            "fluentcontrol_scripts/movearm_airfca_leakage_test.xml",
+        ),
+    ],
+)
 def test_matches_xml_that_ran_on_the_instrument(xml, fixture):
     assert obj(xml) == ref(fixture)
 
 
 def test_get_tips_can_name_the_rack():
-    assert "<LabwareName>FCA_ 1000ul SBS[002]</LabwareName>" in get_tips_xml("FCA, 1000ul SBS", [1], "FCA_ 1000ul SBS[002]")
+    assert "<LabwareName>FCA_ 1000ul SBS[002]</LabwareName>" in get_tips_xml(
+        "FCA, 1000ul SBS", [1], "FCA_ 1000ul SBS[002]"
+    )
 
 
 def test_move_arm_one_channel_at_travel_height():

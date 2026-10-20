@@ -22,11 +22,23 @@ def backends_of(feature):
 def test_all_features_are_there_with_unique_names():
     names = [type(f).__name__ for f in build_features(Fluent780ConnectorConfig())]
     assert names == [
-        "RgaController", "LabwareController", "LiquidHandling",
-        "DoorController", "MethodController", "TemperatureController",
-        "TrayController", "AbsorbanceReader", "FluentPlateHandling",
-        "BioShakeController", "ShakingIncubatorController", "TemperaturePositionController", "Incubator1Controller",
-        "ColorMixDemo", "DeckCamera", "RunController", "StatusController",
+        "RgaController",
+        "LabwareController",
+        "LiquidHandling",
+        "DoorController",
+        "MethodController",
+        "TemperatureController",
+        "TrayController",
+        "AbsorbanceReader",
+        "FluentPlateHandling",
+        "BioShakeController",
+        "ShakingIncubatorController",
+        "TemperaturePositionController",
+        "Incubator1Controller",
+        "ColorMixDemo",
+        "DeckCamera",
+        "RunController",
+        "StatusController",
     ]
     assert len(set(names)) == len(names)
 
@@ -61,10 +73,10 @@ def test_rga_tracker_resyncs_memory_after_a_move(tmp_path):
     plate = "96 Well Flat_Custom[001]"
     assert t.where(plate) == ("Nest7mm_Pos", 6) and not t.moved_away(plate)
     # moving from the base position needs no commands to align the record
-    assert [l for l, _ in t.move_steps(plate, "Regrip_Pos", 1)] == [f"RGA {plate} -> Regrip_Pos[1]"]
+    assert [label for label, _ in t.move_steps(plate, "Regrip_Pos", 1)] == [f"RGA {plate} -> Regrip_Pos[1]"]
     t.record(plate, "Regrip_Pos", 1)
     # returning it in another run first aligns FluentControl's record with the actual position (Regrip_Pos[1])
-    labels = [l for l, _ in t.move_steps(plate, "Nest7mm_Pos", 6)]
+    labels = [label for label, _ in t.move_steps(plate, "Nest7mm_Pos", 6)]
     assert labels == [
         f"RemoveLabware {plate} (bookkeeping only)",
         f"AddLabware {plate} at Regrip_Pos[1] (bookkeeping only)",
@@ -73,7 +85,10 @@ def test_rga_tracker_resyncs_memory_after_a_move(tmp_path):
     add_xml = t.move_steps(plate, "Nest7mm_Pos", 6)[1][1]
     assert "<LabwareType>96 Well Flat_Custom</LabwareType>" in add_xml and "<Location>Regrip_Pos</Location>" in add_xml
     # the position is also saved to the file and survives a restart
-    assert LabwareTracker(PlateTransferConfig(positions_file=str(tmp_path / "pos.json"))).where(plate) == ("Regrip_Pos", 1)
+    assert LabwareTracker(PlateTransferConfig(positions_file=str(tmp_path / "pos.json"))).where(plate) == (
+        "Regrip_Pos",
+        1,
+    )
     t.record(plate, "Nest7mm_Pos", 6)
     assert not t.moved_away(plate)
 

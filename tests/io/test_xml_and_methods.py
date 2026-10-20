@@ -1,6 +1,7 @@
 """Checks the XML sent to the device and the loading of the method list. Connects to neither the device nor the Fluent.
 
-The XML in fixtures/ is exactly what was sent in successful runs on the device (copied from qpcr_water_demo.py's probe_out).
+The XML in fixtures/ is exactly what was sent in successful runs on the device (copied from qpcr_water_demo.py's
+probe_out).
 """
 
 import pathlib
@@ -55,8 +56,13 @@ def test_method_store_snapshot():
 
 @pytest.mark.parametrize(
     ("method", "premethod"),
-    [("test", "ini25"), ("HeatShock", "ini4"), ("EnzymeReaction", "ini37"), ("95-30s_50-60s_72-30s_30cycle", "ini95"),
-     ("For 1 insert", "ini42")],
+    [
+        ("test", "ini25"),
+        ("HeatShock", "ini4"),
+        ("EnzymeReaction", "ini37"),
+        ("95-30s_50-60s_72-30s_30cycle", "ini95"),
+        ("For 1 insert", "ini42"),
+    ],
 )
 def test_matching_premethod(method, premethod):
     ms = load_methods()

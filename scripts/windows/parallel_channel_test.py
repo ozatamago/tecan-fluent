@@ -14,7 +14,9 @@ import sys
 import threading
 import time
 
-sys.coinit_flags = 0  # MTA, so the channel proxies can be used concurrently from other threads (same as the UniteLabs connector)
+sys.coinit_flags = (
+    0  # MTA, so the channel proxies can be used concurrently from other threads (same as the UniteLabs connector)
+)
 
 import comtypes  # noqa: E402
 import comtypes.client  # noqa: E402
@@ -43,7 +45,9 @@ def wait_xml(seconds: float) -> str:
         '    <Object Type="Tecan.Core.Scripting.WaitStatement">\n'
         "      <WaitStatement>\n"
         f"        <Duration>{seconds:g}</Duration>\n"
-        '        <DisplayCountdown Type="System.Boolean">\n          <boolean>false</boolean>\n        </DisplayCountdown>\n'
+        '        <DisplayCountdown Type="System.Boolean">\n'
+        "          <boolean>false</boolean>\n"
+        "        </DisplayCountdown>\n"
         "        <IsStarted>False</IsStarted>\n"
         "        <IsBreakpoint>False</IsBreakpoint>\n"
         "        <IsDisabledForExecution>False</IsDisabledForExecution>\n"
@@ -89,7 +93,12 @@ def send(name: str, seconds: float, box: dict) -> None:
         channels[name].ExecuteCommand(cmd)
         box[name] = {"start": round(start - t0, 2), "end": round(time.time() - t0, 2), "ok": True}
     except Exception as exc:  # noqa: BLE001
-        box[name] = {"start": round(start - t0, 2), "end": round(time.time() - t0, 2), "ok": False, "error": str(exc)[:300]}
+        box[name] = {
+            "start": round(start - t0, 2),
+            "end": round(time.time() - t0, 2),
+            "ok": False,
+            "error": str(exc)[:300],
+        }
 
 
 def main() -> int:

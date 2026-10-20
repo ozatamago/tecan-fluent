@@ -26,7 +26,7 @@ $out = foreach ($f in $files) {
   }
 }
 $out | Sort-Object -Unique
-"""
+"""  # noqa: E501 - PowerShell sent as is
 
 STEP = re.compile(r":Line (\d+) : (.+?) \((?:FCA|LiHa|LIHA)[^)]*\)\s*$")
 PARAMS = re.compile(r"Execution parameters for '([^']+)' at line (\d+): (.*)")
@@ -65,8 +65,9 @@ def expanded_steps(log_text: str) -> list[dict]:
                 current["well_indexes"] = [int(x) for x in re.findall(r"\d+", wells.group(1))]
             vols = re.search(r"Volumes: (.*?)(?:Liquid Classes:|X offset|$)", body)
             if vols:
-                current["volumes"] = {int(c) + 1: float(v) for c, v in re.findall(r"\((\d+), ([0-9.]+)\)", vols.group(1))
-                                      if float(v) > 0}
+                current["volumes"] = {
+                    int(c) + 1: float(v) for c, v in re.findall(r"\((\d+), ([0-9.]+)\)", vols.group(1)) if float(v) > 0
+                }
             lc = re.search(r"Liquid class: (.+?) (?:Volumes:|$)", body)
             if lc:
                 current["liquid_class"] = lc.group(1)
@@ -87,6 +88,7 @@ def expanded_steps(log_text: str) -> list[dict]:
 def describe(steps: list[dict], rows_of) -> list[str]:
     """Readable lines, e.g. "3 Aspirate 4 Well SBS Trough[001] A1: 90 ul (takes up 116.97 ul)". rows_of(labware)
     gives the rows of a labware (None if unknown: indexes are then shown as numbers)."""
+
     def wells(labware, indexes):
         rows = rows_of(labware) if labware else None
         return ",".join(well_name(i, rows) if rows else f"#{i}" for i in indexes)
@@ -101,8 +103,9 @@ def describe(steps: list[dict], rows_of) -> list[str]:
             if s.get("well_indexes") and "Drop Tips" not in s["action"]:
                 text += f" {wells(s['labware'], s['well_indexes'])}"
         if s.get("volumes"):
-            text += ": " + ", ".join(f"{v:g} ul" + (f" (ch{c})" if len(s["volumes"]) > 1 else "")
-                                     for c, v in sorted(s["volumes"].items()))
+            text += ": " + ", ".join(
+                f"{v:g} ul" + (f" (ch{c})" if len(s["volumes"]) > 1 else "") for c, v in sorted(s["volumes"].items())
+            )
         if s.get("aspirated"):
             text += " (takes up " + ", ".join(f"{v:g}" for _, v in sorted(s["aspirated"].items())) + " ul)"
         out.append(text)

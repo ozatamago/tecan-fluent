@@ -109,14 +109,18 @@ class LabwareTracker:
             self._dry = positions
 
     def move_steps(self, labware: str, location: str, site: int) -> list[tuple[str, str]]:
-        """Commands to move from the current position to (location, site); if not at base, first fix FluentControl's record."""
+        """Commands to move from the current position to (location, site); if not at base, first fix FluentControl's
+        record."""
         spec = self.spec(labware)
         steps: list[tuple[str, str]] = []
         if self.moved_away(labware):
             loc, s = self.where(labware)
             steps += [
                 (f"RemoveLabware {labware} (bookkeeping only)", remove_labware_xml(labware)),
-                (f"AddLabware {labware} at {loc}[{s}] (bookkeeping only)", add_labware_xml(spec["type"], labware, loc, s)),
+                (
+                    f"AddLabware {labware} at {loc}[{s}] (bookkeeping only)",
+                    add_labware_xml(spec["type"], labware, loc, s),
+                ),
             ]
         steps.append((f"RGA {labware} -> {location}[{site}]", rga_xml(labware, location, str(site), fixed_site=True)))
         return steps

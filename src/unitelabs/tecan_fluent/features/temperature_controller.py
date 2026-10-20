@@ -2,8 +2,8 @@ import dataclasses
 
 from unitelabs.cdk import sila
 
-from .door_controller import OdtcOperationFailed
 from ..io.fluent_backend import BackendError, FluentOdtcBackend
+from .door_controller import OdtcOperationFailed
 
 
 @dataclasses.dataclass

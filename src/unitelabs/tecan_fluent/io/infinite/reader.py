@@ -58,7 +58,7 @@ class FluentInfiniteReader:
         out = await asyncio.to_thread(
             self.backend._ssh_ps,
             f"-Command \"Get-ChildItem -LiteralPath '{d}' -Recurse -Filter *.mth | "
-            f"ForEach-Object {{ $_.FullName.Substring({len(d) + 1}) }}\"",
+            f'ForEach-Object {{ $_.FullName.Substring({len(d) + 1}) }}"',
         )
         return sorted(line.strip() for line in out.splitlines() if line.strip())
 
@@ -74,21 +74,28 @@ class FluentInfiniteReader:
         settings = f"{self.config.output_dir}\\{name},{method},0,0,0"
         return [(f"Magellan_Measure {method}", magellan_xml("Magellan_Measure", settings))]
 
-    def load_measure_unload_steps(self, labware_type: str, location: str, site: int, method: str,
-                                  name: str) -> list[tuple[str, str]]:
+    def load_measure_unload_steps(
+        self, labware_type: str, location: str, site: int, method: str, name: str
+    ) -> list[tuple[str, str]]:
         c, lbl = self.config, TEMP_LABEL
         return [
             (f"AddLabware {labware_type} at {location}[{site}]", add_labware_xml(labware_type, lbl, location, site)),
             ("Magellan_Open", magellan_xml("Magellan_Open")),
-            (f"RGA -> {c.regrip_location}[{c.regrip_site}]",
-             rga_xml(lbl, c.regrip_location, str(c.regrip_site), fixed_site=True)),
-            (f"RGA -> {c.reader_location}[{c.reader_site}]",
-             rga_xml(lbl, c.reader_location, str(c.reader_site), fixed_site=True)),
+            (
+                f"RGA -> {c.regrip_location}[{c.regrip_site}]",
+                rga_xml(lbl, c.regrip_location, str(c.regrip_site), fixed_site=True),
+            ),
+            (
+                f"RGA -> {c.reader_location}[{c.reader_site}]",
+                rga_xml(lbl, c.reader_location, str(c.reader_site), fixed_site=True),
+            ),
             ("Magellan_Close", magellan_xml("Magellan_Close")),
             *self.measure_steps(method, name),
             ("Magellan_Open", magellan_xml("Magellan_Open")),
-            (f"RGA -> {c.regrip_location}[{c.regrip_site}]",
-             rga_xml(lbl, c.regrip_location, str(c.regrip_site), fixed_site=True)),
+            (
+                f"RGA -> {c.regrip_location}[{c.regrip_site}]",
+                rga_xml(lbl, c.regrip_location, str(c.regrip_site), fixed_site=True),
+            ),
             (f"RGA -> {location}[{site}]", rga_xml(lbl, location, str(site), fixed_site=True)),
             ("Magellan_Close", magellan_xml("Magellan_Close")),
             (f"RemoveLabware {lbl}", remove_labware_xml(lbl)),
@@ -104,15 +111,21 @@ class FluentInfiniteReader:
         c = self.config
         return [
             ("Magellan_Open", magellan_xml("Magellan_Open")),
-            (f"RGA {labware} -> {c.regrip_location}[{c.regrip_site}]",
-             rga_xml(labware, c.regrip_location, str(c.regrip_site), fixed_site=True)),
-            (f"RGA {labware} -> {c.reader_location}[{c.reader_site}]",
-             rga_xml(labware, c.reader_location, str(c.reader_site), fixed_site=True)),
+            (
+                f"RGA {labware} -> {c.regrip_location}[{c.regrip_site}]",
+                rga_xml(labware, c.regrip_location, str(c.regrip_site), fixed_site=True),
+            ),
+            (
+                f"RGA {labware} -> {c.reader_location}[{c.reader_site}]",
+                rga_xml(labware, c.reader_location, str(c.reader_site), fixed_site=True),
+            ),
             ("Magellan_Close", magellan_xml("Magellan_Close")),
             *self.measure_steps(method, name),
             ("Magellan_Open", magellan_xml("Magellan_Open")),
-            (f"RGA {labware} -> {c.regrip_location}[{c.regrip_site}]",
-             rga_xml(labware, c.regrip_location, str(c.regrip_site), fixed_site=True)),
+            (
+                f"RGA {labware} -> {c.regrip_location}[{c.regrip_site}]",
+                rga_xml(labware, c.regrip_location, str(c.regrip_site), fixed_site=True),
+            ),
             (f"RGA {labware} -> base", rga_xml(labware, move_to_base=True)),
             ("Magellan_Close", magellan_xml("Magellan_Close")),
         ]
@@ -123,7 +136,8 @@ class FluentInfiniteReader:
         script = (
             f"$f = Get-ChildItem -LiteralPath '{d}' -Recurse -Filter '{name}*.asc' | "
             "Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
-            "if ($f) { $f.FullName; [Convert]::ToBase64String([IO.File]::ReadAllBytes($f.FullName)) } else { 'NOTFOUND' }"
+            "if ($f) { $f.FullName; [Convert]::ToBase64String([IO.File]::ReadAllBytes($f.FullName)) } "
+            "else { 'NOTFOUND' }"
         )
         deadline = time.monotonic() + 60
         while True:
@@ -139,7 +153,11 @@ class FluentInfiniteReader:
     async def run(self, steps: list[tuple[str, str]], name: str | None, report) -> tuple[str, AscResult | None]:
         started = time.time()
         labels = [label for label, _ in steps]
-        what = "Infinite: " + (labels[0] if len(labels) == 1 else next((x for x in labels if "Measure" in x), labels[0]) + f" and others ({len(labels)} steps)")
+        what = "Infinite: " + (
+            labels[0]
+            if len(labels) == 1
+            else next((x for x in labels if "Measure" in x), labels[0]) + f" and others ({len(labels)} steps)"
+        )
         await self.backend.run_steps(steps, report, what)
         if name is None or self.backend.config.dry_run:
             return "", None

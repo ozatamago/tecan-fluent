@@ -78,12 +78,28 @@ def load_methods(path: pathlib.Path = SNAPSHOT) -> list[OdtcMethod]:
     out: list[OdtcMethod] = []
     for el in root:
         if el.tag == "PreMethod":
-            out.append(OdtcMethod(el.get("methodName", ""), "PreMethod", _num(el.find("TargetBlockTemperature")),
-                                  _num(el.find("TargetLidTemp")), 0, 0.0))
+            out.append(
+                OdtcMethod(
+                    el.get("methodName", ""),
+                    "PreMethod",
+                    _num(el.find("TargetBlockTemperature")),
+                    _num(el.find("TargetLidTemp")),
+                    0,
+                    0.0,
+                )
+            )
         elif el.tag == "Method":
-            out.append(OdtcMethod(el.get("methodName", ""), "Method", _num(el.find("StartBlockTemperature")),
-                                  _num(el.find("StartLidTemperature")), len(el.findall("Step")), _plateau_seconds(el),
-                                  _ramp_seconds(el)))
+            out.append(
+                OdtcMethod(
+                    el.get("methodName", ""),
+                    "Method",
+                    _num(el.find("StartBlockTemperature")),
+                    _num(el.find("StartLidTemperature")),
+                    len(el.findall("Step")),
+                    _plateau_seconds(el),
+                    _ramp_seconds(el),
+                )
+            )
     return out
 
 

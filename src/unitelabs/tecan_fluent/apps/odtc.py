@@ -1,6 +1,6 @@
 """Assembly of the ODTC connector server (config and create_app).
 
-    uv run connector start --app unitelabs.tecan_fluent.apps.odtc:create_app -cfg config.json
+uv run connector start --app unitelabs.tecan_fluent.apps.odtc:create_app -cfg config.json
 """
 
 import collections.abc
@@ -10,11 +10,10 @@ from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
 from ..features.door_controller import DoorController
-from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 from ..features.method_controller import MethodController
 from ..features.status_controller import StatusController
 from ..features.temperature_controller import TemperatureController
-
+from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 
 
 @dataclasses.dataclass

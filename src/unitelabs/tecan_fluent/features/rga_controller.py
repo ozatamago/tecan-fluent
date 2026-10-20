@@ -30,7 +30,8 @@ class RgaController(sila.Feature):
         try:
             steps = self.tracker.move_steps(labware, location, site)
             await _with_progress(
-                status, len(steps),
+                status,
+                len(steps),
                 lambda report: self.backend.run_steps(steps, report, f"RGA: {labware} -> {location}[{site}]"),
             )
         except BackendError as exc:

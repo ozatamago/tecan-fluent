@@ -105,7 +105,8 @@ class PyLabRobotInfiniteReader:
             raise BackendError("Absorbance wavelength must be 230 to 1000 nm")
         started = time.strftime("%Y-%m-%d %H:%M:%S")
         results = await self._do(
-            f"read_absorbance {wavelength} nm", report,
+            f"read_absorbance {wavelength} nm",
+            report,
             lambda b: b.read_absorbance(self._plate, [], wavelength, flashes=self.config.flashes),
         )
         return "", matrix_to_result(results, wavelength, started, self.config)

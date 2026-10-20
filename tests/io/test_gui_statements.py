@@ -33,7 +33,9 @@ PAIRS = [
 
 @pytest.mark.parametrize(("gui", "verified"), PAIRS)
 def test_verified_xml_has_the_gui_statement_structure(gui, verified):
-    assert skeleton((GUI / gui).read_text(encoding="utf-8")) == skeleton((VERIFIED / verified).read_text(encoding="utf-8"))
+    assert skeleton((GUI / gui).read_text(encoding="utf-8")) == skeleton(
+        (VERIFIED / verified).read_text(encoding="utf-8")
+    )
 
 
 def test_every_gui_statement_is_indexed():

@@ -46,6 +46,33 @@ packages = ["src/unitelabs"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 120
+
+[tool.ruff.lint]
+# A moderate start. The docstring rules (D, DOC) and annotations (ANN) are not enabled yet: they would force rewriting
+# the docstrings that the UniteLabs App shows.
+select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle: error
+    "W",   # pycodestyle: warning
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_scheme = "semver2"
+version_provider = "uv"
+major_version_zero = true
+update_changelog_on_bump = true
+
 [tool.uv]
 # commitizen (dev extra) caps deprecated below 2; without this the lock would downgrade the deprecated 3.0 that
 # unitelabs-cdk uses at run time

@@ -21,9 +21,9 @@ import re
 from unitelabs.cdk import sila
 
 from ..io.fluent_backend import BackendError, FluentOdtcBackend
-from .infinite import _with_progress
 from ..io.infinite.xml import _esc, add_labware_xml, remove_labware_xml, rga_xml, wrap
 from ..io.labware_tracker import LabwareTracker
+from .infinite import _with_progress
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 FINGERS = ("Eccentric[001]", "Centric[001]")
@@ -34,7 +34,9 @@ FINGER_NESTS = ("FES Eccentric Nest[001]", "FES Centric Nest[001]")
 
 def _statement(template: str, labware_name: str) -> str:
     src = (DATA / template).read_text(encoding="utf-8").strip()
-    src, n = re.subn(r"<LabwareName>[^<]*</LabwareName>", f"<LabwareName>{_esc(labware_name)}</LabwareName>", src, count=1)
+    src, n = re.subn(
+        r"<LabwareName>[^<]*</LabwareName>", f"<LabwareName>{_esc(labware_name)}</LabwareName>", src, count=1
+    )
     if n != 1:
         raise BackendError(f"{template} has no LabwareName")
     return wrap(src)
@@ -93,12 +95,15 @@ class LabwareController(sila.Feature):
 
     def _check(self, *labware: str) -> None:
         if not self.backend.run_open:
-            raise LabwareCommandFailed("Start a run first (RunController.StartRun): FluentControl forgets labware "
-                                       "positions when a run ends")
+            raise LabwareCommandFailed(
+                "Start a run first (RunController.StartRun): FluentControl forgets labware positions when a run ends"
+            )
         if self.tracker is not None:
             for name in labware:
                 if name in self.tracker.config.labware:
-                    raise LabwareCommandFailed(f"{name} is tracked by RgaController; move it with MoveLabware / ReturnLabware")
+                    raise LabwareCommandFailed(
+                        f"{name} is tracked by RgaController; move it with MoveLabware / ReturnLabware"
+                    )
 
     async def _send(self, label: str, xml: str, status: sila.Status) -> None:
         try:
@@ -107,7 +112,9 @@ class LabwareController(sila.Feature):
             raise LabwareCommandFailed(str(exc)) from None
 
     @sila.ObservableCommand(errors=[LabwareCommandFailed])
-    async def add_labware(self, label: str, labware_type: str, location: str, site: int, *, status: sila.Status) -> None:
+    async def add_labware(
+        self, label: str, labware_type: str, location: str, site: int, *, status: sila.Status
+    ) -> None:
         """
         Tell FluentControl that a labware is at a position (AddLabware). Nothing moves.
 
@@ -118,8 +125,11 @@ class LabwareController(sila.Feature):
           Site: Site number (from 1).
         """
         self._check(label)
-        await self._send(f"AddLabware {label} ({labware_type}) at {location}[{site}]",
-                         add_labware_xml(labware_type, label, location, site), status)
+        await self._send(
+            f"AddLabware {label} ({labware_type}) at {location}[{site}]",
+            add_labware_xml(labware_type, label, location, site),
+            status,
+        )
         self.backend.session_labware[label] = labware_type
 
     @sila.ObservableCommand(errors=[LabwareCommandFailed])

@@ -11,12 +11,23 @@ import re
 import sys
 
 WANT = {
-    "01_SolutionPrimer_Ver1_0", "02_PCR_Ver1_0", "03_Transformation_Ver1_0", "04_Selection_Medium_Preparation_Ver1_0",
-    "05_Subculture_and_OD_measure_Ver1_0", "06_Plasmid_Extraction_Ver1_0", "07_Golden_Gate_Assembly_Ver1_0",
-    "Sub_ODTC", "SUB_Heat shock", "Sub_Skake", "Sub_KineticMeasurement", "Sub_Start ODTC Initialize Method", "Sub_Cleanup",
+    "01_SolutionPrimer_Ver1_0",
+    "02_PCR_Ver1_0",
+    "03_Transformation_Ver1_0",
+    "04_Selection_Medium_Preparation_Ver1_0",
+    "05_Subculture_and_OD_measure_Ver1_0",
+    "06_Plasmid_Extraction_Ver1_0",
+    "07_Golden_Gate_Assembly_Ver1_0",
+    "Sub_ODTC",
+    "SUB_Heat shock",
+    "Sub_Skake",
+    "Sub_KineticMeasurement",
+    "Sub_Start ODTC Initialize Method",
+    "Sub_Cleanup",
 }
 PAT = re.compile(
-    r'<Object Type="Tecan\.VisionX\.ApplicationDriver\.(?:ApplicationDriverBase\.ApplicationDriverMacro|LegacyDriverMacro)">\s*'
+    r'<Object Type="Tecan\.VisionX\.ApplicationDriver\.'
+    r'(?:ApplicationDriverBase\.ApplicationDriverMacro|LegacyDriverMacro)">\s*'
     r'<(LegacyDriverMacro|ApplicationDriverMacro) [^>]*Name="([^"]+)" ModuleName="([^"]+)"[^>]*'
     r'IsDisabledForExecution="(\w+)" LineNumber="(\d+)">.*?</\1>\s*</Object>',
     re.S,

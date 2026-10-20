@@ -24,33 +24,56 @@ def obj(xml: str) -> list[str]:
     lines = [ln.strip() for ln in xml.splitlines() if ln.strip()]
     start = next(i for i, ln in enumerate(lines) if ln.startswith("<Object "))
     end = max(i for i, ln in enumerate(lines) if ln == "</Object>")
-    return lines[start:end + 1]
+    return lines[start : end + 1]
 
 
 def gui(path: str) -> list[str]:
     return obj((FIX / path).read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize(("xml", "fixture"), [
-    (transfer_xml("Template_Lid_6mm[001]", "HotelMP_Pos", 2), "gui_macros/RGA1_TransferLabware_17.xml"),  # 03 line 33
-    (to_base_xml("IncubationLid_6mm[001]"), "gui_macros/RGA1_TransferLabware_20.xml"),                     # 03 line 56
-    (lid_on_xml("Template_Lid_6mm[001]", "TemplatePlate[001]"), "gui_macros/RGA1_TransferLabware_23.xml"),  # 03 line 76
-    (get_fingers_xml("Eccentric[001]"), "gui_statements/CgaGetFingersScriptCommandDataV1_2.xml"),          # 03 line 29
-    (get_fingers_xml("Centric[001]"), "gui_statements/CgaGetFingersScriptCommandDataV1_1.xml"),            # 06 line 59 (04 has the same fields in another order)
-    (drop_fingers_xml(), "gui_statements/CgaDropFingersScriptCommandDataV1_2.xml"),                         # 03 line 28
-    (drop_fingers_xml("FES Eccentric Nest[001]"), "gui_statements/CgaDropFingersScriptCommandDataV1_1.xml"),  # 06 line 58
-    (remove_labware_xml("TemplatePlate[001]"), "gui_statements/RemoveLabwareDataV1_1.xml"),
-])
+@pytest.mark.parametrize(
+    ("xml", "fixture"),
+    [
+        (
+            transfer_xml("Template_Lid_6mm[001]", "HotelMP_Pos", 2),
+            "gui_macros/RGA1_TransferLabware_17.xml",
+        ),  # 03 line 33
+        (to_base_xml("IncubationLid_6mm[001]"), "gui_macros/RGA1_TransferLabware_20.xml"),  # 03 line 56
+        (
+            lid_on_xml("Template_Lid_6mm[001]", "TemplatePlate[001]"),
+            "gui_macros/RGA1_TransferLabware_23.xml",
+        ),  # 03 line 76
+        (get_fingers_xml("Eccentric[001]"), "gui_statements/CgaGetFingersScriptCommandDataV1_2.xml"),  # 03 line 29
+        (
+            get_fingers_xml("Centric[001]"),
+            "gui_statements/CgaGetFingersScriptCommandDataV1_1.xml",
+        ),  # 06 line 59 (04 has the same fields in another order)
+        (drop_fingers_xml(), "gui_statements/CgaDropFingersScriptCommandDataV1_2.xml"),  # 03 line 28
+        (
+            drop_fingers_xml("FES Eccentric Nest[001]"),
+            "gui_statements/CgaDropFingersScriptCommandDataV1_1.xml",
+        ),  # 06 line 58
+        (remove_labware_xml("TemplatePlate[001]"), "gui_statements/RemoveLabwareDataV1_1.xml"),
+    ],
+)
 def test_matches_gui_script_statement(xml, fixture):
     assert obj(xml) == gui(fixture)
 
 
 def test_add_labware_has_the_gui_fields():
-    xml = add_labware_xml("96 Well Skirted PCR_Custom_Template", "TemplatePlate[001]", "BioShake_Q1_Adapter_Site_PCR", 1)
-    fields = [ln for ln in obj(xml) if ln.startswith(("<LabwareType>", "<LabwareLable>", "<Location>", "<Position>",
-                                                       "<Rotation>", "<HasLid>"))]
-    expected = [ln for ln in gui("gui_statements/AddLabwareDataV1_1.xml") if ln.startswith(
-        ("<LabwareType>", "<LabwareLable>", "<Location>", "<Position>", "<Rotation>", "<HasLid>"))]
+    xml = add_labware_xml(
+        "96 Well Skirted PCR_Custom_Template", "TemplatePlate[001]", "BioShake_Q1_Adapter_Site_PCR", 1
+    )
+    fields = [
+        ln
+        for ln in obj(xml)
+        if ln.startswith(("<LabwareType>", "<LabwareLable>", "<Location>", "<Position>", "<Rotation>", "<HasLid>"))
+    ]
+    expected = [
+        ln
+        for ln in gui("gui_statements/AddLabwareDataV1_1.xml")
+        if ln.startswith(("<LabwareType>", "<LabwareLable>", "<Location>", "<Position>", "<Rotation>", "<HasLid>"))
+    ]
     assert fields == expected
 
 

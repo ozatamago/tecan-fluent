@@ -27,8 +27,10 @@ class FakePc:
             return json.dumps(self.recorder) if self.recorder else ""
         if ".done" in command:  # a still-image request
             names, folder, tag = next(v for k, v in self.put.items() if k.endswith(".tmp")).split("|")
-            return "\n".join(f"OK {n} {folder}\\x_{n}_{tag}.png {folder}\\x_{n}_{tag}_preview.jpg 3072x2048"
-                             for n in names.split(","))
+            return "\n".join(
+                f"OK {n} {folder}\\x_{n}_{tag}.png {folder}\\x_{n}_{tag}_preview.jpg 3072x2048"
+                for n in names.split(",")
+            )
         return ""
 
     def ssh(self, command, timeout=120):
@@ -46,7 +48,13 @@ def make(pc: FakePc, monkeypatch) -> DeckCameras:
 
 def test_parse_shot_lines_and_frame_rate():
     r = parse_shot_lines("OK Left C:\\a.png C:\\a_p.jpg 3072x2048\r\nERROR Right camera 1 not found\n")
-    assert r[0] == {"camera": "Left", "status": "ok", "image": "C:\\a.png", "preview": "C:\\a_p.jpg", "size": "3072x2048"}
+    assert r[0] == {
+        "camera": "Left",
+        "status": "ok",
+        "image": "C:\\a.png",
+        "preview": "C:\\a_p.jpg",
+        "size": "3072x2048",
+    }
     assert r[1] == {"camera": "Right", "status": "error", "error": "camera 1 not found"}
     assert frames_per_second("12:00:00.000 1\n12:00:00.500 2\n12:00:01.000 3\n") == 2.0
 
@@ -58,8 +66,15 @@ def test_still_images_without_recorder_use_the_shot_script(monkeypatch):
 
 
 def test_still_images_while_recording_are_asked_from_the_recorder(monkeypatch):
-    pc = FakePc({"pid": 42, "out_dir": r"C:\rec", "record": "Left", "cameras": ["Left", "Center", "Right"],
-                 "started": "2026-10-16T13:00:00"})
+    pc = FakePc(
+        {
+            "pid": 42,
+            "out_dir": r"C:\rec",
+            "record": "Left",
+            "cameras": ["Left", "Center", "Right"],
+            "started": "2026-10-16T13:00:00",
+        }
+    )
     cams = make(pc, monkeypatch)
     results = cams.capture(["Center", "Left"], r"C:\run\images", "end")
     [(path, text)] = pc.put.items()

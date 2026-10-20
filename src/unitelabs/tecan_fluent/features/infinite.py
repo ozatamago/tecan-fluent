@@ -83,7 +83,11 @@ async def _with_progress(status: sila.Status, total: int, coro_factory):
 def _result(method: str, path: str, asc) -> MeasurementResult:
     if asc is None:
         return MeasurementResult(method=method, labels=[], values=[], result_file="", metadata=[])
-    values = [WellValue(label=lbl, well=w, value=v) for lbl, grid in zip(asc.labels, asc.values) for w, v in grid.items()]
+    values = [
+        WellValue(label=lbl, well=w, value=v)
+        for lbl, grid in zip(asc.labels, asc.values, strict=False)
+        for w, v in grid.items()
+    ]
     return MeasurementResult(method=method, labels=asc.labels, values=values, result_file=path, metadata=asc.metadata)
 
 

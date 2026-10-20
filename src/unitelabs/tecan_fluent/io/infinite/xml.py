@@ -25,11 +25,13 @@ def _esc(text: str) -> str:
 def wrap(obj_xml: str) -> str:
     """Wrap one FluentControl statement in a ScriptGroup (same as build_liha_xml.wrap)."""
     body = "\n".join("    " + ln for ln in obj_xml.strip().split("\n"))
-    return ("<ScriptGroup>\n  <Objects>\n" + body + "\n  </Objects>\n"
-            "  <Name></Name>\n"
-            "  <IsBreakpoint>False</IsBreakpoint>\n"
-            "  <IsDisabledForExecution>False</IsDisabledForExecution>\n"
-            "  <LineNumber>0</LineNumber>\n</ScriptGroup>")
+    return (
+        "<ScriptGroup>\n  <Objects>\n" + body + "\n  </Objects>\n"
+        "  <Name></Name>\n"
+        "  <IsBreakpoint>False</IsBreakpoint>\n"
+        "  <IsDisabledForExecution>False</IsDisabledForExecution>\n"
+        "  <LineNumber>0</LineNumber>\n</ScriptGroup>"
+    )
 
 
 def magellan_xml(name: str, settings: str | None = None) -> str:
@@ -42,17 +44,20 @@ def magellan_xml(name: str, settings: str | None = None) -> str:
         # 2026-08-13: a <YYMMDD-NNN> sequence pattern broke GenericCommand
         raise BackendError("Magellan_Measure arguments must not contain < > (use a fixed file name)")
     es = "<ExecutionSettings />" if settings is None else f"<ExecutionSettings>{_esc(settings)}</ExecutionSettings>"
-    return wrap('<Object Type="Tecan.VisionX.ApplicationDriver.LegacyDriverMacro">\n'
-                f'  <LegacyDriverMacro Version="1" Name="{name}" ModuleName="Magellan"'
-                ' ExecutionTime="PT2S" IsBreakpoint="false"'
-                ' IsDisabledForExecution="false" LineNumber="0">\n'
-                f'    {es}\n'
-                '  </LegacyDriverMacro>\n'
-                '</Object>')
+    return wrap(
+        '<Object Type="Tecan.VisionX.ApplicationDriver.LegacyDriverMacro">\n'
+        f'  <LegacyDriverMacro Version="1" Name="{name}" ModuleName="Magellan"'
+        ' ExecutionTime="PT2S" IsBreakpoint="false"'
+        ' IsDisabledForExecution="false" LineNumber="0">\n'
+        f"    {es}\n"
+        "  </LegacyDriverMacro>\n"
+        "</Object>"
+    )
 
 
-def rga_xml(labware: str, location: str = "<BASE>", site: str = "",
-            move_to_base: bool = False, fixed_site: bool = False) -> str:
+def rga_xml(
+    labware: str, location: str = "<BASE>", site: str = "", move_to_base: bool = False, fixed_site: bool = False
+) -> str:
     """RGA1_TransferLabware. Replace the template values with triple-escaped text (same as qpcr_water_demo.rga).
 
     The real <BASE> is stored as &amp;amp;lt;BASE&amp;amp;gt;
@@ -68,7 +73,9 @@ def rga_xml(labware: str, location: str = "<BASE>", site: str = "",
     }
     for tag, value in fields.items():
         pattern = rf"(&amp;lt;{tag}&amp;gt;).*?(&amp;lt;/{tag}&amp;gt;)"
-        new, count = re.subn(pattern, lambda m: m.group(1) + _esc(_esc(_esc(value))) + m.group(2), src, count=1)
+        new, count = re.subn(
+            pattern, lambda m, value=value: m.group(1) + _esc(_esc(_esc(value))) + m.group(2), src, count=1
+        )
         if count != 1:
             raise BackendError(f"RGA template has no {tag}")
         src = new
@@ -78,36 +85,40 @@ def rga_xml(labware: str, location: str = "<BASE>", site: str = "",
 
 def add_labware_xml(labware_type: str, label: str, location: str, position: int) -> str:
     """Register labware in FluentControl's worktable memory (no device motion). Statement form from 02_PCR_Ver1_0."""
-    return wrap('<Object Type="Tecan.Core.Scripting.Worktable.Data.AddLabwareDataV1">\n'
-                "  <AddLabwareDataV1>\n"
-                f"    <LabwareType>{_esc(labware_type)}</LabwareType>\n"
-                f"    <LabwareLable>{_esc(label)}</LabwareLable>\n"
-                f"    <Location>{_esc(location)}</Location>\n"
-                f"    <Position>{int(position)}</Position>\n"
-                "    <Rotation>0</Rotation>\n"
-                "    <HasLid>False</HasLid>\n"
-                '    <Data Type="Tecan.Core.Scripting.Programming.ProgrammingStatementBaseDataV1">\n'
-                "      <ProgrammingStatementBaseDataV1>\n"
-                "        <IsBreakpoint>False</IsBreakpoint>\n"
-                "        <IsDisabledForExecution>False</IsDisabledForExecution>\n"
-                "        <LineNumber>0</LineNumber>\n"
-                "      </ProgrammingStatementBaseDataV1>\n"
-                "    </Data>\n"
-                "  </AddLabwareDataV1>\n"
-                "</Object>")
+    return wrap(
+        '<Object Type="Tecan.Core.Scripting.Worktable.Data.AddLabwareDataV1">\n'
+        "  <AddLabwareDataV1>\n"
+        f"    <LabwareType>{_esc(labware_type)}</LabwareType>\n"
+        f"    <LabwareLable>{_esc(label)}</LabwareLable>\n"
+        f"    <Location>{_esc(location)}</Location>\n"
+        f"    <Position>{int(position)}</Position>\n"
+        "    <Rotation>0</Rotation>\n"
+        "    <HasLid>False</HasLid>\n"
+        '    <Data Type="Tecan.Core.Scripting.Programming.ProgrammingStatementBaseDataV1">\n'
+        "      <ProgrammingStatementBaseDataV1>\n"
+        "        <IsBreakpoint>False</IsBreakpoint>\n"
+        "        <IsDisabledForExecution>False</IsDisabledForExecution>\n"
+        "        <LineNumber>0</LineNumber>\n"
+        "      </ProgrammingStatementBaseDataV1>\n"
+        "    </Data>\n"
+        "  </AddLabwareDataV1>\n"
+        "</Object>"
+    )
 
 
 def remove_labware_xml(label: str) -> str:
     """Remove labware from FluentControl's worktable memory (no device motion). Statement form from 02_PCR_Ver1_0."""
-    return wrap('<Object Type="Tecan.Core.Scripting.Worktable.Data.RemoveLabwareDataV1">\n'
-                "  <RemoveLabwareDataV1>\n"
-                f"    <LabwareName>{_esc(label)}</LabwareName>\n"
-                '    <Data Type="Tecan.Core.Scripting.Programming.ProgrammingStatementBaseDataV1">\n'
-                "      <ProgrammingStatementBaseDataV1>\n"
-                "        <IsBreakpoint>False</IsBreakpoint>\n"
-                "        <IsDisabledForExecution>False</IsDisabledForExecution>\n"
-                "        <LineNumber>0</LineNumber>\n"
-                "      </ProgrammingStatementBaseDataV1>\n"
-                "    </Data>\n"
-                "  </RemoveLabwareDataV1>\n"
-                "</Object>")
+    return wrap(
+        '<Object Type="Tecan.Core.Scripting.Worktable.Data.RemoveLabwareDataV1">\n'
+        "  <RemoveLabwareDataV1>\n"
+        f"    <LabwareName>{_esc(label)}</LabwareName>\n"
+        '    <Data Type="Tecan.Core.Scripting.Programming.ProgrammingStatementBaseDataV1">\n'
+        "      <ProgrammingStatementBaseDataV1>\n"
+        "        <IsBreakpoint>False</IsBreakpoint>\n"
+        "        <IsDisabledForExecution>False</IsDisabledForExecution>\n"
+        "        <LineNumber>0</LineNumber>\n"
+        "      </ProgrammingStatementBaseDataV1>\n"
+        "    </Data>\n"
+        "  </RemoveLabwareDataV1>\n"
+        "</Object>"
+    )

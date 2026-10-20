@@ -34,7 +34,12 @@ STOP_STATES = {"RunModePaused", "RunModeStopOnError", "Unknown"}
 
 # Only allow macros that have been proven on the ODTC device.
 # Left out: SetParameters crashes the device (confirmed device-side bug); StopMethod is rejected as unknown.
-ALLOWED_MACROS = {"SiLA-ODTC_OpenDoor", "SiLA-ODTC_CloseDoor", "SiLA-ODTC_ExecuteMethod", "SiLA-ODTC_ReadActualTemperature"}
+ALLOWED_MACROS = {
+    "SiLA-ODTC_OpenDoor",
+    "SiLA-ODTC_CloseDoor",
+    "SiLA-ODTC_ExecuteMethod",
+    "SiLA-ODTC_ReadActualTemperature",
+}
 # Macros that require an argument (the method name for ExecuteMethod)
 MACROS_WITH_SETTINGS = {"SiLA-ODTC_ExecuteMethod"}
 
@@ -93,9 +98,7 @@ def odtc_macro_xml(name: str, settings: str | None = None) -> str:
         "  <Objects>\n"
         '    <Object Type="Tecan.VisionX.ApplicationDriver.LegacyDriverMacro">\n'
         f'      <LegacyDriverMacro Version="1" Name="{name}" ModuleName="SiLA-ODTC" ExecutionTime="PT2S" '
-        'IsBreakpoint="false" IsDisabledForExecution="false" LineNumber="0">\n'
-        + body
-        + "      </LegacyDriverMacro>\n"
+        'IsBreakpoint="false" IsDisabledForExecution="false" LineNumber="0">\n' + body + "      </LegacyDriverMacro>\n"
         "    </Object>\n"
         "  </Objects>\n"
         "  <Name></Name>\n"
@@ -159,7 +162,9 @@ class FluentOdtcBackend:
             except Exception as first:  # noqa: BLE001 - if it cannot connect, look up the port again via mDNS
                 port = discover_port(self.config.unitelabs_uuid)
                 if port is None or port == self.config.port:
-                    raise BackendError(f"Cannot connect to the UniteLabs connector ({self.config.host}:{self.config.port}): {first}") from None
+                    raise BackendError(
+                        f"Cannot connect to the UniteLabs connector ({self.config.host}:{self.config.port}): {first}"
+                    ) from None
                 logger.info("UniteLabs connector port had changed from %s to %s", self.config.port, port)
                 self.config.port = port
                 self._client = SilaClient(self.config.host, port, insecure=True)
@@ -186,7 +191,9 @@ class FluentOdtcBackend:
 
     def _active_dialogs(self) -> list[str]:
         try:
-            return [f"{d.DialogIdentifier}: {d.Description.strip()}" for d in self._c().RunController.ActiveDialogs.get()]
+            return [
+                f"{d.DialogIdentifier}: {d.Description.strip()}" for d in self._c().RunController.ActiveDialogs.get()
+            ]
         except Exception:  # noqa: BLE001 - carry on even if this cannot be read
             return []
 
@@ -282,7 +289,9 @@ class FluentOdtcBackend:
             if state == "RunModeQueryVariables":
                 c.RuntimeController.CloseQueryAtStartupDialog(True)
             if time.monotonic() > deadline:
-                raise BackendError(f"The execution channel did not open (state {state}). {' / '.join(self._active_dialogs())}")
+                raise BackendError(
+                    f"The execution channel did not open (state {state}). {' / '.join(self._active_dialogs())}"
+                )
             report(f"waiting channel ({state})")
             time.sleep(2)
 
@@ -343,7 +352,9 @@ class FluentOdtcBackend:
         self.session_labware = {}
         self.tips = {}
         self._session["images_start"] = self._deck_images("start")
-        self._write_session({"started": started, "dry_run": self.config.dry_run, "images_start": self._session["images_start"]})
+        self._write_session(
+            {"started": started, "dry_run": self.config.dry_run, "images_start": self._session["images_start"]}
+        )
         return self.preflight.location(self._session["rel"])
 
     def _end_session(self, report) -> int:
@@ -357,13 +368,21 @@ class FluentOdtcBackend:
         session, self._session = self._session, None
         if not self.config.dry_run:
             self._close_run(report)
-        self._write_session({"started": session["started"], "dry_run": self.config.dry_run,
-                             "ended": datetime.datetime.now().strftime("%Y%m%d-%H%M%S"), "commands": session["commands"],
-                             "images_start": session.get("images_start", []), "images_end": images_end})
+        self._write_session(
+            {
+                "started": session["started"],
+                "dry_run": self.config.dry_run,
+                "ended": datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+                "commands": session["commands"],
+                "images_start": session.get("images_start", []),
+                "images_end": images_end,
+            }
+        )
         return session["commands"]
 
     async def start_run(self, report=lambda _: None) -> str:
-        """Open one FluentControl run that later commands share (tips and positions carry over). Returns the record folder."""
+        """Open one FluentControl run that later commands share (tips and positions carry over). Returns the record
+        folder."""
         async with self._exclusive("Run: StartRun"):
             return await asyncio.to_thread(self._guarded, self._start_session, report)
 
@@ -393,8 +412,9 @@ class FluentOdtcBackend:
         async with self._exclusive(f"ODTC: {name}" + (f" {settings}" if settings else "")):
             return await asyncio.to_thread(self._guarded, self._run_macro, name, settings, report)
 
-    async def run_steps(self, steps: list[tuple[str, str]], report=lambda _: None, what: str = "",
-                        extra: dict | None = None, post=None) -> list[float]:
+    async def run_steps(
+        self, steps: list[tuple[str, str]], report=lambda _: None, what: str = "", extra: dict | None = None, post=None
+    ) -> list[float]:
         """Send several XML commands in order within one run (e.g. load, measure and unload in a single run).
         extra is added to the record's manifest (e.g. the liquid class settings used)."""
         what = what or (steps[0][0] if len(steps) == 1 else f"{steps[0][0]} and {len(steps) - 1} more commands")
@@ -429,7 +449,7 @@ class FluentOdtcBackend:
         if self.config.dry_run:
             self._run_macro("SiLA-ODTC_ReadActualTemperature", None, report)
             return {"timestamp": "dry-run"}
-        since = self._ssh_ps('-Command "Get-Date -Format \'yyyy-MM-dd HH:mm:ss.fff\'"').strip()
+        since = self._ssh_ps("-Command \"Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'\"").strip()
         self._run_macro("SiLA-ODTC_ReadActualTemperature", None, report)
         for _ in range(10):  # the log write can lag slightly
             out = self._ssh_ps(f'-File "{self.config.sensor_script}" -Since "{since}"')
@@ -451,14 +471,17 @@ class FluentOdtcBackend:
             return await asyncio.to_thread(self._guarded, self._read_sensor_values, report)
 
     def _guarded(self, fn, *args):
-        """On an unexpected exception from a backend call, drop the connection (rebuilt next time); raise BackendError."""
+        """On an unexpected exception from a backend call, drop the connection (rebuilt next time); raise
+        BackendError."""
         try:
             return fn(*args)
         except BackendError:
             raise
         except Exception as exc:  # noqa: BLE001
             self._client = None
-            raise BackendError(f"Communication with the UniteLabs connector failed: {type(exc).__name__}: {str(exc)[:300]}") from None
+            raise BackendError(
+                f"Communication with the UniteLabs connector failed: {type(exc).__name__}: {str(exc)[:300]}"
+            ) from None
 
     # ---- Status (does not move the device)
     @property

@@ -15,17 +15,29 @@ import sys
 from extract_gui_macros import WANT
 
 TYPES = (
-    "LihaGetTipsScriptCommandDataV3", "LihaDropTipsScriptCommandDataV2",
-    "LihaAspirateScriptCommandDataV5", "LihaDispenseScriptCommandDataV6", "LihaMixScriptCommandDataV4",
-    "LihaEmptyTipsScriptCommandDataV2", "LihaDetectLiquidScriptCommandDataV3",
-    "LihaSetClldErrorHandlingScriptCommandDataV4", "LihaInlineFilterCheckScriptCommandDataV1",
-    "LihaReagentDistributionSmartCommand", "LihaSampleTransferSmartCommand",
+    "LihaGetTipsScriptCommandDataV3",
+    "LihaDropTipsScriptCommandDataV2",
+    "LihaAspirateScriptCommandDataV5",
+    "LihaDispenseScriptCommandDataV6",
+    "LihaMixScriptCommandDataV4",
+    "LihaEmptyTipsScriptCommandDataV2",
+    "LihaDetectLiquidScriptCommandDataV3",
+    "LihaSetClldErrorHandlingScriptCommandDataV4",
+    "LihaInlineFilterCheckScriptCommandDataV1",
+    "LihaReagentDistributionSmartCommand",
+    "LihaSampleTransferSmartCommand",
     "LihaTransferIndividualVolumesSmartCommand",
-    "AddLabwareDataV1", "RemoveLabwareDataV1",
-    "CgaGetFingersScriptCommandDataV1", "CgaDropFingersScriptCommandDataV1",
+    "AddLabwareDataV1",
+    "RemoveLabwareDataV1",
+    "CgaGetFingersScriptCommandDataV1",
+    "CgaDropFingersScriptCommandDataV1",
     # worklists (02, 05, 07) and variables written to / read from files (results of DetectLiquid)
-    "RUPGetFileStatement", "WorklistImportStatementDataV2", "LoadWorklistStatementDataV4",
-    "ExecuteWorklistStatementDataV1", "ExportVariableStatement", "ImportVariableStatement",
+    "RUPGetFileStatement",
+    "WorklistImportStatementDataV2",
+    "LoadWorklistStatementDataV4",
+    "ExecuteWorklistStatementDataV1",
+    "ExportVariableStatement",
+    "ImportVariableStatement",
 )
 OPEN = re.compile(r'<Object Type="([^"]+)">|</Object>')
 
@@ -40,7 +52,7 @@ def top_level_objects(text: str):
         kind, start = stack.pop()
         short = kind.rsplit(".", 1)[-1]
         if short in TYPES and not any(k.rsplit(".", 1)[-1] in TYPES for k, _ in stack):
-            yield short, text[start:m.end()]
+            yield short, text[start : m.end()]
 
 
 def first(tag: str, xml: str) -> str:
@@ -50,9 +62,12 @@ def first(tag: str, xml: str) -> str:
 
 def summary(xml: str) -> str:
     """The main arguments, for index.tsv."""
-    volumes = re.findall(r"<string>([^<]*)</string>", (re.search(r"<Volumes>(.*?)</Volumes>", xml, re.S) or [""," "])[1])
-    tips = re.findall(r"<int>(\d+)</int>", (re.search(r"<SelectedTipsIndexes>(.*?)</SelectedTipsIndexes>", xml, re.S)
-                                             or ["", ""])[1])
+    volumes = re.findall(
+        r"<string>([^<]*)</string>", (re.search(r"<Volumes>(.*?)</Volumes>", xml, re.S) or ["", " "])[1]
+    )
+    tips = re.findall(
+        r"<int>(\d+)</int>", (re.search(r"<SelectedTipsIndexes>(.*?)</SelectedTipsIndexes>", xml, re.S) or ["", ""])[1]
+    )
     parts = {
         "labware": first("LabwareName", xml) or first("LabwareLable", xml),
         "wells": first("SelectedWellsString", xml),
@@ -77,12 +92,16 @@ def main(src: pathlib.Path, out: pathlib.Path) -> None:
         if name not in WANT:
             continue
         for kind, obj in top_level_objects(text):
-            if re.search(r"<IsDisabledForExecution>True</IsDisabledForExecution>", obj, re.I) or \
-                    re.search(r'IsDisabledForExecution="true"', obj):
+            if re.search(r"<IsDisabledForExecution>True</IsDisabledForExecution>", obj, re.I) or re.search(
+                r'IsDisabledForExecution="true"', obj
+            ):
                 continue
             line = first("LineNumber", obj) or (re.search(r'LineNumber="(\d+)"', obj) or ["", ""])[1]
-            obj = re.sub(r"<(Group)?LineNumber>\d+</(Group)?LineNumber>",
-                         lambda m: f"<{m.group(1) or ''}LineNumber>0</{m.group(1) or ''}LineNumber>", obj)
+            obj = re.sub(
+                r"<(Group)?LineNumber>\d+</(Group)?LineNumber>",
+                lambda m: f"<{m.group(1) or ''}LineNumber>0</{m.group(1) or ''}LineNumber>",
+                obj,
+            )
             obj = re.sub(r'LineNumber="\d+"', 'LineNumber="0"', obj)
             obj = "\n".join(ln.strip() for ln in obj.splitlines() if ln.strip())
             if obj in seen:

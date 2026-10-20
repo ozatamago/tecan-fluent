@@ -32,8 +32,9 @@ def run(target: str, command: str, timeout: float) -> subprocess.CompletedProces
     """Run one command line on the Fluent PC (cmd.exe syntax, e.g. 'powershell -NoProfile -Command "..."')."""
     if is_local(target):
         return subprocess.run(command, shell=True, capture_output=True, timeout=timeout)
-    return subprocess.run(["ssh", "-o", "ConnectTimeout=15", "-o", "BatchMode=yes", target, command],
-                          capture_output=True, timeout=timeout)
+    return subprocess.run(
+        ["ssh", "-o", "ConnectTimeout=15", "-o", "BatchMode=yes", target, command], capture_output=True, timeout=timeout
+    )
 
 
 def popen(target: str, command: str, **kwargs) -> subprocess.Popen:
@@ -49,11 +50,14 @@ def spec(target: str, path: str) -> str:
     return f"{target}:{path.replace(chr(92), '/')}"
 
 
-def copy(src: str, dest: str, recursive: bool = False, timeout: float = 600, target: str = "") -> subprocess.CompletedProcess:
+def copy(
+    src: str, dest: str, recursive: bool = False, timeout: float = 600, target: str = ""
+) -> subprocess.CompletedProcess:
     """Copy like scp: src and dest are local paths or spec() paths; a dest ending in "/" is a folder to copy into."""
     if not is_local(target):
-        return subprocess.run(["scp", "-q"] + (["-r"] if recursive else []) + [src, dest],
-                              capture_output=True, timeout=timeout)
+        return subprocess.run(
+            ["scp", "-q"] + (["-r"] if recursive else []) + [src, dest], capture_output=True, timeout=timeout
+        )
     try:
         into = dest.endswith(("/", "\\")) or os.path.isdir(dest)
         source = pathlib.Path(long_path(src))

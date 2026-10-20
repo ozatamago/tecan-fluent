@@ -21,9 +21,16 @@ import dataclasses
 from unitelabs.cdk import sila
 
 from ..io.fluent_backend import BackendError, FluentOdtcBackend
-from .infinite import MeasurementResult, _result, _with_progress
 from ..io.infinite.reader import FluentInfiniteReader
-from .liquid_handling import LiquidHandling, LiquidHandlingFailed, drop_tips_xml, get_tips_xml, pipetting_xml, well_index
+from .infinite import MeasurementResult, _result, _with_progress
+from .liquid_handling import (
+    LiquidHandling,
+    LiquidHandlingFailed,
+    drop_tips_xml,
+    get_tips_xml,
+    pipetting_xml,
+    well_index,
+)
 
 TROUGH = "4 Well SBS Trough[001]"
 LANES = {"water": "A1", "red": "A2", "yellow": "A3", "blue": "A4"}
@@ -66,7 +73,9 @@ def per_well(values: list[float], n: int, name: str) -> list[float]:
     return [float(v) for v in values]
 
 
-def plan_wells(wells: list[str], red: list[float], yellow: list[float], blue: list[float], water: float) -> list[PlannedWell]:
+def plan_wells(
+    wells: list[str], red: list[float], yellow: list[float], blue: list[float], water: float
+) -> list[PlannedWell]:
     names = split_wells(wells)
     if not names:
         raise DemoFailed("Give at least one well")
@@ -74,7 +83,7 @@ def plan_wells(wells: list[str], red: list[float], yellow: list[float], blue: li
     if len(set(names)) != len(names):
         raise DemoFailed("Each well may appear only once")
     out = []
-    for w, r, y, b in zip(names, red, yellow, blue):
+    for w, r, y, b in zip(names, red, yellow, blue, strict=False):
         well_index(w, 8, 12)  # refuses wells outside a 96-well plate
         vols = {"water": float(water), "red": float(r), "yellow": float(y), "blue": float(b)}
         if any(v < 0 for v in vols.values()):
@@ -104,10 +113,14 @@ def pipetting_steps(planned: list[PlannedWell]) -> list[tuple[str, str]]:
             what = f"{liquid} column {column} ({','.join(wells)})"
             steps += [
                 (f"GetTips {TIP_TYPE} ch{channels} for {what}", get_tips_xml(TIP_TYPE, channels)),
-                (f"Aspirate {'/'.join(f'{v:g}' for v in vols)} ul {liquid} from {TROUGH} {lane}",
-                 pipetting_xml("Aspirate", TROUGH, [lane] * len(channels), vols, LIQUID_CLASS, channels, 1, 4)),
-                (f"Dispense {liquid} into {','.join(wells)}",
-                 pipetting_xml("Dispense", PLATE, wells, vols, LIQUID_CLASS, channels, 8, 12)),
+                (
+                    f"Aspirate {'/'.join(f'{v:g}' for v in vols)} ul {liquid} from {TROUGH} {lane}",
+                    pipetting_xml("Aspirate", TROUGH, [lane] * len(channels), vols, LIQUID_CLASS, channels, 1, 4),
+                ),
+                (
+                    f"Dispense {liquid} into {','.join(wells)}",
+                    pipetting_xml("Dispense", PLATE, wells, vols, LIQUID_CLASS, channels, 8, 12),
+                ),
                 (f"DropTips ch{channels}", drop_tips_xml(channels)),
             ]
     return steps
@@ -143,9 +156,16 @@ class ColorMixDemo(sila.Feature):
         self.liquid = liquid
 
     @sila.ObservableCommand(errors=[DemoFailed])
-    async def mix_colors_and_measure(self, wells: list[str], red: list[float], yellow: list[float],
-                                     blue: list[float], water: float, *,
-                                     status: sila.Status) -> tuple[list[str], MeasurementResult, list[str]]:
+    async def mix_colors_and_measure(
+        self,
+        wells: list[str],
+        red: list[float],
+        yellow: list[float],
+        blue: list[float],
+        water: float,
+        *,
+        status: sila.Status,
+    ) -> tuple[list[str], MeasurementResult, list[str]]:
         """
         Pipette, measure and put the plate back. Each well gets the water volume, then its red, yellow and blue
         volumes, with new 200 ul tips per liquid; up to 8 wells of one column are done at once. Nothing is mixed.
@@ -171,8 +191,9 @@ class ColorMixDemo(sila.Feature):
             # the same checks as the pipetting commands: definitions, tips, liquid class settings, volumes
             self.liquid._refresh()
             biggest = max(v for p in planned for v in p.volumes.values())
-            extra = self.liquid._tip_and_class(TIP_TYPE, LIQUID_CLASS, [biggest],
-                                               [self.liquid._labware_type(PLATE), self.liquid._labware_type(TROUGH)])
+            extra = self.liquid._tip_and_class(
+                TIP_TYPE, LIQUID_CLASS, [biggest], [self.liquid._labware_type(PLATE), self.liquid._labware_type(TROUGH)]
+            )
             await self.reader.check_method(METHOD)
             name = self.reader._measure_name()
             steps = pipetting_steps(planned) + self.reader.worktable_plate_steps(PLATE, METHOD, name)
@@ -180,14 +201,18 @@ class ColorMixDemo(sila.Feature):
             raise DemoFailed(str(exc)) from None
         except BackendError as exc:
             raise DemoFailed(str(exc)) from None
-        extra["demo"] = {"wells": [dataclasses.asdict(p) for p in planned], "method": METHOD, "plate": PLATE,
-                         "trough": TROUGH, "lanes": LANES}
+        extra["demo"] = {
+            "wells": [dataclasses.asdict(p) for p in planned],
+            "method": METHOD,
+            "plate": PLATE,
+            "trough": TROUGH,
+            "lanes": LANES,
+        }
         opened_here = not self.backend.run_open
         try:
             if opened_here:
                 await self.backend.start_run()
-            path, asc = await _with_progress(status, len(steps),
-                                             lambda report: self._run(steps, name, report, extra))
+            path, asc = await _with_progress(status, len(steps), lambda report: self._run(steps, name, report, extra))
         except BackendError as exc:
             raise DemoFailed(str(exc)) from None
         finally:

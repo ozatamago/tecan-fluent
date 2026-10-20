@@ -61,8 +61,9 @@ class DeckCamera(sila.Feature):
         import asyncio
 
         try:
-            results = await asyncio.to_thread(self.cameras.capture, list(self.cameras.config.cameras),
-                                              self.cameras.single_dir())
+            results = await asyncio.to_thread(
+                self.cameras.capture, list(self.cameras.config.cameras), self.cameras.single_dir()
+            )
         except Exception as exc:  # noqa: BLE001
             raise CameraFailed(str(exc)) from None
         return [r.get("image") or f"{r['camera']}: {r.get('error') or r['status']}" for r in results]

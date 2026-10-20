@@ -1,6 +1,6 @@
 """Server assembly for the Infinite 200 PRO in the Fluent 780 (through FluentControl).
 
-    uv run connector start --app unitelabs.tecan_fluent.apps.infinite_fluent:create_app -cfg config.infinite.json
+uv run connector start --app unitelabs.tecan_fluent.apps.infinite_fluent:create_app -cfg config.infinite.json
 """
 
 import collections.abc
@@ -9,10 +9,9 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
-from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 from ..features.infinite import AbsorbanceReader, FluentPlateHandling, TrayController
+from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
-
 
 
 @dataclasses.dataclass

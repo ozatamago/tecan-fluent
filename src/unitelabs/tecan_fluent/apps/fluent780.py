@@ -18,18 +18,13 @@ from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig, sila
 
 from .. import __version__
 from ..features.colormix_demo import ColorMixDemo
-from ..features.door_controller import DoorController
 from ..features.deck_camera import DeckCamera
-from ..io.deck_cameras import DeckCameraConfig, DeckCameras
-from ..io.definitions import FluentPc
-from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
+from ..features.door_controller import DoorController
 from ..features.infinite import AbsorbanceReader, FluentPlateHandling, TrayController
-from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
 from ..features.labware_controller import LabwareController
 from ..features.liquid_handling import LiquidHandling
 from ..features.method_controller import MethodController
 from ..features.rga_controller import RgaController
-from ..io.labware_tracker import LabwareTracker, PlateTransferConfig
 from ..features.run_controller import RunController
 from ..features.status_controller import StatusController
 from ..features.temperature_controller import TemperatureController
@@ -39,7 +34,11 @@ from ..features.temperature_devices import (
     ShakingIncubatorController,
     TemperaturePositionController,
 )
-
+from ..io.deck_cameras import DeckCameraConfig, DeckCameras
+from ..io.definitions import FluentPc
+from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
+from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
+from ..io.labware_tracker import LabwareTracker, PlateTransferConfig
 
 
 @dataclasses.dataclass
@@ -74,8 +73,12 @@ def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
     backend = FluentOdtcBackend(config.fluent)
     reader = FluentInfiniteReader(backend, config.infinite)
     tracker = LabwareTracker(config.plates, FluentPc(config.fluent.definitions), persist=not config.fluent.dry_run)
-    cameras = DeckCameras(config.cameras, config.fluent.definitions.ssh_target,
-                          config.fluent.definitions.remote_dir + "\\records", config.fluent.dry_run)
+    cameras = DeckCameras(
+        config.cameras,
+        config.fluent.definitions.ssh_target,
+        config.fluent.definitions.remote_dir + "\\records",
+        config.fluent.dry_run,
+    )
     backend.cameras = cameras
     cameras.session_dir = lambda: backend.session_dir
     liquid = LiquidHandling(backend)

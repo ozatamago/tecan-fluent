@@ -40,13 +40,17 @@ def vx(name: str, body: str) -> str:
 
 
 def site(template: str, child: str = "") -> str:
-    return (f"<a:KeyValueOfintSite><a:Key>0</a:Key><a:Value><BaseTemplateGuid>{template}</BaseTemplateGuid>"
-            f"{child}</a:Value></a:KeyValueOfintSite>")
+    return (
+        f"<a:KeyValueOfintSite><a:Key>0</a:Key><a:Value><BaseTemplateGuid>{template}</BaseTemplateGuid>"
+        f"{child}</a:Value></a:KeyValueOfintSite>"
+    )
 
 
 def placed(label: str) -> str:
-    return (f"<ConnectedComponent><LabwareName><a:KeyValueOfstringstring><a:Key>default</a:Key>"
-            f"<a:Value>{label}</a:Value></a:KeyValueOfstringstring></LabwareName></ConnectedComponent>")
+    return (
+        f"<ConnectedComponent><LabwareName><a:KeyValueOfstringstring><a:Key>default</a:Key>"
+        f"<a:Value>{label}</a:Value></a:KeyValueOfstringstring></LabwareName></ConnectedComponent>"
+    )
 
 
 class FakePc:
@@ -64,9 +68,15 @@ class FakePc:
         for rel, data in self.files.items():
             text = data.decode()
             loc = text.split("<LocationGroupName>")[1].split("<")[0] if "<LocationGroupName>" in text else ""
-            out[rel] = {"path": rel, "size": len(data), "ticks": "0", "sha256": hashlib.sha256(data).hexdigest(),
-                        "name": text.split("<ObjectName>")[1].split("<")[0], "location": loc,
-                        "airfca": "<PipettingDeviceType>AirFca</PipettingDeviceType>" in text}
+            out[rel] = {
+                "path": rel,
+                "size": len(data),
+                "ticks": "0",
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "name": text.split("<ObjectName>")[1].split("<")[0],
+                "location": loc,
+                "airfca": "<PipettingDeviceType>AirFca</PipettingDeviceType>" in text,
+            }
         return out
 
     def read(self, rel):
@@ -96,34 +106,53 @@ class FakePc:
 
 def database() -> dict[str, str]:
     return {
-        r"SystemSpecific\LiquidClasses\lc1.xlqc": vx("Water Free Single", "<PipettingDeviceType>AirFca</PipettingDeviceType>"),
+        r"SystemSpecific\LiquidClasses\lc1.xlqc": vx(
+            "Water Free Single", "<PipettingDeviceType>AirFca</PipettingDeviceType>"
+        ),
         r"SystemSpecific\LiquidClasses\lc2.xlqc": vx("Standard Wash", "<PipettingDeviceType>Fca</PipettingDeviceType>"),
-        r"SystemSpecific\Worktable\Components\tip200.xcmp": vx("FCA, 200ul SBS", "<Key>DiTiTypeGroup</Key><Value>FCA DiTi 200µl</Value>"),
-        r"SystemSpecific\Worktable\Sites\s-regrip.xsit": vx("s-regrip", "<LocationGroupName>Regrip_Pos</LocationGroupName>"),
-        r"SystemSpecific\Worktable\Sites\s-nest.xsit": vx("s-nest", "<LocationGroupName>Nest7mm_Pos</LocationGroupName>"),
+        r"SystemSpecific\Worktable\Components\tip200.xcmp": vx(
+            "FCA, 200ul SBS", "<Key>DiTiTypeGroup</Key><Value>FCA DiTi 200µl</Value>"
+        ),
+        r"SystemSpecific\Worktable\Sites\s-regrip.xsit": vx(
+            "s-regrip", "<LocationGroupName>Regrip_Pos</LocationGroupName>"
+        ),
+        r"SystemSpecific\Worktable\Sites\s-nest.xsit": vx(
+            "s-nest", "<LocationGroupName>Nest7mm_Pos</LocationGroupName>"
+        ),
         r"SystemSpecific\DriverConfiguration\rga.xdrv": vx("RGA 1", ""),
         r"SystemSpecific\Configuration\fca.xcfg": vx("Fca", ""),
-        r"SystemSpecific\Worktable\Workspaces\ws.xwsp": vx("WT_TEST", (
-            f'<Workspace xmlns="{C}" xmlns:a="{A}"><Frame><Arrangements>'
-            f'<Arrangement><Sites>{site("s-regrip")}</Sites></Arrangement>'
-            f'<Arrangement><Sites>{site("s-nest", placed("Plate[001]"))}{site("s-nest")}</Sites></Arrangement>'
-            "</Arrangements></Frame></Workspace>")),
+        r"SystemSpecific\Worktable\Workspaces\ws.xwsp": vx(
+            "WT_TEST",
+            (
+                f'<Workspace xmlns="{C}" xmlns:a="{A}"><Frame><Arrangements>'
+                f"<Arrangement><Sites>{site('s-regrip')}</Sites></Arrangement>"
+                f"<Arrangement><Sites>{site('s-nest', placed('Plate[001]'))}{site('s-nest')}</Sites></Arrangement>"
+                "</Arrangements></Frame></Workspace>"
+            ),
+        ),
     }
 
 
 def rga_xml(location: str, site_no: int, labware: str = "Plate[001]") -> str:
-    inner = (f"<TransferLabwareCommandParameters><Labware>{labware}</Labware><Location>{location}</Location>"
-             f"<Site>{site_no}</Site></TransferLabwareCommandParameters>")
+    inner = (
+        f"<TransferLabwareCommandParameters><Labware>{labware}</Labware><Location>{location}</Location>"
+        f"<Site>{site_no}</Site></TransferLabwareCommandParameters>"
+    )
     esc = inner.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
-    return (f'<ScriptGroup><Objects><Object Type="Tecan.VisionX.ApplicationDriver.ApplicationDriverBase.ApplicationDriverMacro">'
-            f'<ApplicationDriverMacro Version="1" Name="RGA1_TransferLabware" ModuleName="RGA 1">'
-            f"<ExecutionSettings>{esc}</ExecutionSettings></ApplicationDriverMacro></Object></Objects></ScriptGroup>")
+    return (
+        "<ScriptGroup><Objects>"
+        f'<Object Type="Tecan.VisionX.ApplicationDriver.ApplicationDriverBase.ApplicationDriverMacro">'
+        f'<ApplicationDriverMacro Version="1" Name="RGA1_TransferLabware" ModuleName="RGA 1">'
+        f"<ExecutionSettings>{esc}</ExecutionSettings></ApplicationDriverMacro></Object></Objects></ScriptGroup>"
+    )
 
 
 def aspirate_xml(liquid_class: str) -> str:
-    return ('<Object Type="Tecan.Core.Instrument.Devices.LiHa.Scripting.LihaAspirateScriptCommandDataV5">'
-            f"<LiquidClassNameBySelection>{liquid_class}</LiquidClassNameBySelection>"
-            "<LabwareName>Plate[001]</LabwareName></Object>")
+    return (
+        '<Object Type="Tecan.Core.Instrument.Devices.LiHa.Scripting.LihaAspirateScriptCommandDataV5">'
+        f"<LiquidClassNameBySelection>{liquid_class}</LiquidClassNameBySelection>"
+        "<LabwareName>Plate[001]</LabwareName></Object>"
+    )
 
 
 @pytest.fixture
@@ -137,7 +166,9 @@ def preflight(pc):
 
 
 def test_ok_command_is_recorded_on_the_fluent_pc_only(preflight, pc, tmp_path):
-    record = preflight.begin([("RGA move", rga_xml("Nest7mm_Pos", 2)), ("Aspirate", aspirate_xml("Water Free Single"))], "test")
+    record = preflight.begin(
+        [("RGA move", rga_xml("Nest7mm_Pos", 2)), ("Aspirate", aspirate_xml("Water Free Single"))], "test"
+    )
     record.finish({"status": "ok"})
     [stored] = list((pc.records / "runs").iterdir())
     manifest = json.loads((stored / "manifest.json").read_text())
@@ -163,12 +194,15 @@ def test_failed_copy_waits_locally_and_is_sent_later(preflight, pc, tmp_path):
     assert not list((tmp_path / ".riken_fluent780" / "pending").rglob("*.pending.json"))
 
 
-@pytest.mark.parametrize(("steps", "message"), [
-    ([("x", rga_xml("Nest7mm_Pos", 3))], r"Nest7mm_Pos\[3\] does not exist"),
-    ([("x", rga_xml("Nowhere_Pos", 1))], "Location 'Nowhere_Pos' is not on worktable"),
-    ([("x", aspirate_xml("No Such Class"))], "Liquid class 'No Such Class' is not defined"),
-    ([("x", aspirate_xml("Standard Wash"))], "has no AirFca part"),
-])
+@pytest.mark.parametrize(
+    ("steps", "message"),
+    [
+        ([("x", rga_xml("Nest7mm_Pos", 3))], r"Nest7mm_Pos\[3\] does not exist"),
+        ([("x", rga_xml("Nowhere_Pos", 1))], "Location 'Nowhere_Pos' is not on worktable"),
+        ([("x", aspirate_xml("No Such Class"))], "Liquid class 'No Such Class' is not defined"),
+        ([("x", aspirate_xml("Standard Wash"))], "has no AirFca part"),
+    ],
+)
 def test_missing_or_unfit_definitions_refuse(preflight, steps, message):
     with pytest.raises(DefinitionCheckFailed, match=message):
         preflight.begin(steps, "test")

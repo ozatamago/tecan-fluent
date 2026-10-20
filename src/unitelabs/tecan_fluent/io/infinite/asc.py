@@ -48,7 +48,7 @@ def parse_asc(text: str) -> AscResult:
                 parts = lines[i].split("\t")
                 if parts[0].strip() != row:
                     raise ValueError(f"Unexpected ASC row header: {parts[0]!r} (expected {row})")
-                for col, value in zip(cols, parts[1:]):
+                for col, value in zip(cols, parts[1:], strict=False):
                     grid[f"{row}{int(col)}"] = _num(value)
                 i += 1
             grids.append(grid)

@@ -3,15 +3,17 @@ import datetime
 
 from unitelabs.cdk import sila
 
-from .door_controller import OdtcOperationFailed
 from ..io.fluent_backend import BackendError, FluentOdtcBackend
 from ..io.method_store import SNAPSHOT_TAKEN, load_methods, premethods_for
 from ..io.progress import run_with_progress
+from .door_controller import OdtcOperationFailed
 
 PRE_METHOD_S = 470.0
-"""Duration of a PreMethod, constant regardless of target (PT7M45S). ini95: 466.2 s on 2026-10-09, ini25: 466.3 s on 10-15."""
+"""Duration of a PreMethod, constant regardless of target (PT7M45S). ini95: 466.2 s on 2026-10-09, ini25: 466.3 s
+on 10-15."""
 METHOD_MARGIN = 1.07
-"""Margin on the Method estimate (holds + ramps at the nominal Slope). 30-cycle PCR: estimated 84.4 min, measured 90.5."""
+"""Margin on the Method estimate (holds + ramps at the nominal Slope). 30-cycle PCR: estimated 84.4 min, measured
+90.5."""
 
 
 @dataclasses.dataclass
@@ -124,9 +126,7 @@ class MethodController(sila.Feature):
         self._find(pre_method, "PreMethod")
         self._last_pre_method = ""  # a PreMethod that fails partway does not count as done
         try:
-            elapsed = await run_with_progress(
-                self.backend, "SiLA-ODTC_ExecuteMethod", pre_method, status, PRE_METHOD_S
-            )
+            elapsed = await run_with_progress(self.backend, "SiLA-ODTC_ExecuteMethod", pre_method, status, PRE_METHOD_S)
         except BackendError as exc:
             raise OdtcOperationFailed(str(exc)) from None
         self._last_pre_method = pre_method

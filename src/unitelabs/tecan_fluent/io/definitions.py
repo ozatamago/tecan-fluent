@@ -13,8 +13,8 @@ space, and the lab wants the records next to the instrument):
 - ``OFML\\definitions\\versions\\<sha256>.<ext>``: every version of a definition file that an operation used, stored
   once. FluentControl overwrites a definition in place when it is edited, so this is the only way to see later what
   a liquid class or worktable looked like when an operation ran.
-- ``OFML\\records\\runs\\<time>_<operation>\\``: the XML sent (``steps``), ``manifest.json`` (each name used, the file it
-  resolved to, its hash, where that version is stored, key values) and ``result.json``. No copies of definitions.
+- ``OFML\\records\\runs\\<time>_<operation>\\``: the XML sent (``steps``), ``manifest.json`` (each name used, the file
+  it resolved to, its hash, where that version is stored, key values) and ``result.json``. No copies of definitions.
 
 Before each operation the index is brought up to date, the names the XML uses are looked up, and the operation is
 refused if a name is missing, a location or site is not on the worktable, a liquid class has no Air FCA part (the arm
@@ -95,15 +95,28 @@ def _unescape(xml: str) -> str:
 def extract_references(xml: str) -> dict[str, list]:
     """Names an XML command uses, by kind. Values are sorted and unique (pairs for locations and macros)."""
     t = _unescape(xml)
-    refs: dict[str, set] = {k: set() for k in (
-        "liquid_classes", "auxiliary_liquid_classes", "tips", "labware_types", "labware", "locations",
-        "macros", "arms")}
+    refs: dict[str, set] = {
+        k: set()
+        for k in (
+            "liquid_classes",
+            "auxiliary_liquid_classes",
+            "tips",
+            "labware_types",
+            "labware",
+            "locations",
+            "macros",
+            "arms",
+        )
+    }
     for tag in ("LiquidClassNameBySelection", "LiquidClassName"):
         refs["liquid_classes"].update(v for v in re.findall(rf"<{tag}>([^<]+)</{tag}>", t) if v.strip())
     for block in re.findall(r"<LiquidClassNames>(.*?)</LiquidClassNames>", t, re.S):
         refs["liquid_classes"].update(v for v in re.findall(r"<string>([^<]+)</string>", block) if v.strip())
-    for tag in ("EmptyTipContentLiquidClassNameBySelection", "EmptyTipsLiquidClassNameBySelection",
-                "WashLiquidClassNameBySelection"):
+    for tag in (
+        "EmptyTipContentLiquidClassNameBySelection",
+        "EmptyTipsLiquidClassNameBySelection",
+        "WashLiquidClassNameBySelection",
+    ):
         refs["auxiliary_liquid_classes"].update(v for v in re.findall(rf"<{tag}>([^<]+)</{tag}>", t) if v.strip())
     refs["tips"].update(m.strip() for m in re.findall(r"TOOLNAME:([^<]+)<", t))
     refs["labware_types"].update(re.findall(r"<LabwareType>([^<]+)</LabwareType>", t))
@@ -112,7 +125,7 @@ def extract_references(xml: str) -> dict[str, list]:
         refs["labware"].update(v.strip().strip('"') for v in re.findall(rf"<{tag}>([^<]+)</{tag}>", t) if v.strip())
     # RGA: <Location>..<Site>; AddLabware: <Location>..<Position>
     for m in re.finditer(r"<Location>([^<]*)</Location>", t):
-        after = t[m.end():m.end() + 600]
+        after = t[m.end() : m.end() + 600]
         site = re.search(r"<(?:Site|Position)>([^<]*)</(?:Site|Position)>", after)
         refs["locations"].add((m.group(1), site.group(1) if site else ""))
     for m in re.finditer(r'<(LegacyDriverMacro|ApplicationDriverMacro) [^>]*Name="([^"]+)" ModuleName="([^"]+)"', t):
@@ -173,7 +186,9 @@ class FluentPc:
     def _scp(self, src: str, dest: str, recursive: bool = False, timeout: int = 600) -> None:
         out = remote.copy(src, dest, recursive, timeout, self.config.ssh_target)
         if out.returncode != 0:
-            raise DefinitionCheckFailed(f"Copy to/from the Fluent PC failed: {out.stderr.decode(errors='replace')[:300]}")
+            raise DefinitionCheckFailed(
+                f"Copy to/from the Fluent PC failed: {out.stderr.decode(errors='replace')[:300]}"
+            )
 
     def _remote(self, path: str) -> str:
         return remote.spec(self.config.ssh_target, path)
@@ -181,8 +196,10 @@ class FluentPc:
     def run_ps(self, script: str, timeout: int = 600) -> bytes:
         """Copy a PowerShell script into OFML\\work and run it (avoids quoting problems)."""
         name = f"run_{os.getpid()}_{threading.get_ident()}.ps1"  # the background uploader may run at the same time
-        self._ssh(f'powershell -NoProfile -Command "New-Item -ItemType Directory -Force \'{self.root}\\work\' | Out-Null"',
-                  min(timeout, 300))
+        self._ssh(
+            f"powershell -NoProfile -Command \"New-Item -ItemType Directory -Force '{self.root}\\work' | Out-Null\"",
+            min(timeout, 300),
+        )
         with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8-sig") as f:
             f.write(script)
             local = f.name
@@ -205,8 +222,10 @@ class FluentPc:
             return pathlib.Path(dest).read_bytes()
 
     def read_baseline(self) -> dict[str, str]:
-        out = self._ssh(f'powershell -NoProfile -Command "$p=\'{self.root}\\definitions\\baseline.json\'; '
-                        'if (Test-Path $p) { Get-Content $p -Raw -Encoding UTF8 } else { \'{}\' }"')
+        out = self._ssh(
+            f"powershell -NoProfile -Command \"$p='{self.root}\\definitions\\baseline.json'; "
+            "if (Test-Path $p) { Get-Content $p -Raw -Encoding UTF8 } else { '{}' }\""
+        )
         return json.loads(out.decode("utf-8-sig") or "{}")
 
     def write_baseline(self, baseline: dict[str, str]) -> None:
@@ -214,14 +233,20 @@ class FluentPc:
             json.dump(baseline, f, ensure_ascii=False, indent=1)
             local = f.name
         try:
-            self._ssh(f'powershell -NoProfile -Command "New-Item -ItemType Directory -Force \'{self.root}\\definitions\' | Out-Null"')
+            self._ssh(
+                f"powershell -NoProfile -Command "
+                f"\"New-Item -ItemType Directory -Force '{self.root}\\definitions' | Out-Null\""
+            )
             self._scp(local, self._remote(self.root + r"\definitions\baseline.json"))
         finally:
             os.unlink(local)
 
     def read_file(self, path: str) -> str | None:
         """Text of a file on the Fluent PC, or None if it does not exist."""
-        out = self._ssh(f'powershell -NoProfile -Command "if (Test-Path \'{path}\') {{ \'1\'; Get-Content \'{path}\' -Raw -Encoding UTF8 }} else {{ \'0\' }}"')
+        out = self._ssh(
+            f"powershell -NoProfile -Command "
+            f"\"if (Test-Path '{path}') {{ '1'; Get-Content '{path}' -Raw -Encoding UTF8 }} else {{ '0' }}\""
+        )
         text = out.decode("utf-8-sig").replace("\r", "")
         return text[2:] if text.startswith("1") else None
 
@@ -231,7 +256,7 @@ class FluentPc:
             f.write(text)
             local = f.name
         try:
-            self._ssh(f'powershell -NoProfile -Command "New-Item -ItemType Directory -Force \'{folder}\' | Out-Null"')
+            self._ssh(f"powershell -NoProfile -Command \"New-Item -ItemType Directory -Force '{folder}' | Out-Null\"")
             self._scp(local, self._remote(path))
         finally:
             os.unlink(local)
@@ -242,19 +267,24 @@ class FluentPc:
         target = f"{self.root}\\records\\{remote_rel}"
         parent = target.rsplit("\\", 1)[0]
         t = self.STORE_TIMEOUT
-        self._ssh(f'powershell -NoProfile -Command "New-Item -ItemType Directory -Force \'{parent}\' | Out-Null"', t)
+        self._ssh(f"powershell -NoProfile -Command \"New-Item -ItemType Directory -Force '{parent}' | Out-Null\"", t)
         self._scp(str(local), self._remote(parent) + "/", recursive=local.is_dir(), timeout=t)
         if definitions:
             # copy to a temporary name, check the hash, then keep it under the hash it really has
             lines = "\n".join(
                 f"$v = '{self.root}\\definitions\\versions\\{sha}{pathlib.PureWindowsPath(rel).suffix}'; "
-                f"if (-not (Test-Path $v)) {{ $tmp = $v + '.tmp'; Copy-Item -LiteralPath '{REMOTE_DB}\\{rel}' -Destination $tmp; "
+                f"if (-not (Test-Path $v)) {{ $tmp = $v + '.tmp'; "
+                f"Copy-Item -LiteralPath '{REMOTE_DB}\\{rel}' -Destination $tmp; "
                 f"$h = (Get-FileHash -Algorithm SHA256 -LiteralPath $tmp).Hash.ToLower(); "
                 f"if ($h -eq '{sha}') {{ Move-Item $tmp $v }} else {{ Move-Item -Force $tmp ($v -replace '{sha}', $h); "
-                f"'changed while copying: {rel}' }} }}" for rel, sha in definitions)
-            self.run_ps("$ErrorActionPreference = 'Stop'\n"
-                        f"New-Item -ItemType Directory -Force '{self.root}\\definitions\\versions' | Out-Null\n" + lines + "\n",
-                        timeout=t)
+                f"'changed while copying: {rel}' }} }}"
+                for rel, sha in definitions
+            )
+            self.run_ps(
+                "$ErrorActionPreference = 'Stop'\n"
+                f"New-Item -ItemType Directory -Force '{self.root}\\definitions\\versions' | Out-Null\n" + lines + "\n",
+                timeout=t,
+            )
 
 
 # ---------------------------------------------------------------- worktable
@@ -274,9 +304,9 @@ def parse_workspace(xml: bytes, site_location: dict[str, str]) -> tuple[dict[str
         if lab is not None and lab.text:
             labels.add(lab.text)
         arrs = comp.find(C + "Arrangements")
-        for arr in (arrs.findall(C + "Arrangement") if arrs is not None else []):
+        for arr in arrs.findall(C + "Arrangement") if arrs is not None else []:
             sites = arr.find(C + "Sites")
-            for kv in (list(sites) if sites is not None else []):
+            for kv in list(sites) if sites is not None else []:
                 val = kv.find(A + "Value")
                 g = site_location.get(val.findtext(C + "BaseTemplateGuid") or "", "")
                 if g:
@@ -297,9 +327,9 @@ def workspace_labware(xml: bytes, site_location: dict[str, str], component_name:
 
     def walk(comp):
         arrs = comp.find(C + "Arrangements")
-        for arr in (arrs.findall(C + "Arrangement") if arrs is not None else []):
+        for arr in arrs.findall(C + "Arrangement") if arrs is not None else []:
             sites = arr.find(C + "Sites")
-            for kv in (list(sites) if sites is not None else []):
+            for kv in list(sites) if sites is not None else []:
                 val = kv.find(A + "Value")
                 g = site_location.get(val.findtext(C + "BaseTemplateGuid") or "", "")
                 if g:
@@ -308,8 +338,11 @@ def workspace_labware(xml: bytes, site_location: dict[str, str], component_name:
                 if cc is not None and len(cc):
                     lab = cc.find(C + "LabwareName/" + A + "KeyValueOfstringstring/" + A + "Value")
                     if lab is not None and lab.text and g:
-                        out[lab.text] = {"type": component_name.get(cc.findtext(C + "CarrierOrLabwareTemplateGUID") or "", ""),
-                                         "location": g, "site": counts[g]}
+                        out[lab.text] = {
+                            "type": component_name.get(cc.findtext(C + "CarrierOrLabwareTemplateGUID") or "", ""),
+                            "location": g,
+                            "site": counts[g],
+                        }
                     walk(cc)
 
     walk(next(e for e in root.iter() if e.tag == C + "Frame"))
@@ -319,8 +352,17 @@ def workspace_labware(xml: bytes, site_location: dict[str, str], component_name:
 def tip_values(xml: bytes) -> dict[str, str]:
     u = _unescape(xml.decode("utf-8-sig", errors="replace"))
     kv = dict(re.findall(r"<(?:\w+:)?Key>([^<]*)</(?:\w+:)?Key>\s*<(?:\w+:)?Value[^>]*>(?:\s*<[^>]+>)*([^<]{0,80})", u))
-    keep = ("DiTiTypeGroup", "TipCapacity", "Filter", "MaxNettoVolumeForTransferPhase", "ZTravel", "ZStart",
-            "ZMax", "ZBottom", "MaxImmersionDepth")
+    keep = (
+        "DiTiTypeGroup",
+        "TipCapacity",
+        "Filter",
+        "MaxNettoVolumeForTransferPhase",
+        "ZTravel",
+        "ZStart",
+        "ZMax",
+        "ZBottom",
+        "MaxImmersionDepth",
+    )
     return {k: kv[k].strip() for k in keep if k in kv}
 
 
@@ -366,7 +408,8 @@ class Preflight:
         else:
             shutil.copy2(remote.long_path(local), remote.long_path(stash))
         (stash.parent / (stash.name + ".pending.json")).write_text(
-            json.dumps({"remote_rel": remote_rel, "definitions": definitions}))
+            json.dumps({"remote_rel": remote_rel, "definitions": definitions})
+        )
         self.store_pending()
 
     def store_pending(self) -> None:
@@ -439,13 +482,25 @@ class Preflight:
     def runtime_labware(self, index: dict[str, dict], pc=None) -> dict[str, dict]:
         """Labware registered on FluentControl's RuntimeWorkspace: label -> {"type", "location", "site"}."""
         pc = pc or self.pc
-        hits = sorted(p for p, e in index.items() if p.lower().endswith(".xwsp") and e.get("name") == self.config.runtime_workspace)
+        hits = sorted(
+            p
+            for p, e in index.items()
+            if p.lower().endswith(".xwsp") and e.get("name") == self.config.runtime_workspace
+        )
         if not hits:
             return {}
         key = ("runtime", hits[0], index[hits[0]]["sha256"])
         if getattr(self, "_runtime_cache", (None,))[0] != key:
-            sites = {pathlib.PureWindowsPath(p).stem: e.get("location", "") for p, e in index.items() if p.lower().endswith(".xsit")}
-            comps = {pathlib.PureWindowsPath(p).stem: e.get("name", "") for p, e in index.items() if p.lower().endswith(".xcmp")}
+            sites = {
+                pathlib.PureWindowsPath(p).stem: e.get("location", "")
+                for p, e in index.items()
+                if p.lower().endswith(".xsit")
+            }
+            comps = {
+                pathlib.PureWindowsPath(p).stem: e.get("name", "")
+                for p, e in index.items()
+                if p.lower().endswith(".xcmp")
+            }
             self._runtime_cache = (key, workspace_labware(pc.read(hits[0]), sites, comps))
         return self._runtime_cache[1]
 
@@ -453,13 +508,18 @@ class Preflight:
         sha = index[rel]["sha256"]
         if self._workspace_cache and self._workspace_cache[0] == sha:
             return self._workspace_cache[1]
-        sites = {pathlib.PureWindowsPath(p).stem: e.get("location", "")
-                 for p, e in index.items() if p.lower().endswith(".xsit")}
+        sites = {
+            pathlib.PureWindowsPath(p).stem: e.get("location", "")
+            for p, e in index.items()
+            if p.lower().endswith(".xsit")
+        }
         result = parse_workspace(self.pc.read(rel), sites)
         self._workspace_cache = (sha, result)
         return result
 
-    def begin(self, steps: list[tuple[str, str]], what: str, session: str = "", extra: dict | None = None) -> "RunRecord":
+    def begin(
+        self, steps: list[tuple[str, str]], what: str, session: str = "", extra: dict | None = None
+    ) -> "RunRecord":
         """Check everything the steps use and start the record. Raises DefinitionCheckFailed to refuse.
 
         session is the relative folder of an open run (StartRun); the record goes inside it."""
@@ -473,8 +533,16 @@ class Preflight:
             for kind, values in extract_references(xml).items():
                 merged.setdefault(kind, set()).update(tuple(v) if isinstance(v, (list, tuple)) else v for v in values)
         refs = {k: sorted(v) for k, v in merged.items()}
-        manifest: dict = {"operation": what, "time": stamp, "dry_run": self.dry_run, "references": refs,
-                          "definitions": [], "warnings": [], "first_seen": [], **(extra or {})}
+        manifest: dict = {
+            "operation": what,
+            "time": stamp,
+            "dry_run": self.dry_run,
+            "references": refs,
+            "definitions": [],
+            "warnings": [],
+            "first_seen": [],
+            **(extra or {}),
+        }
         self.last_record = self.location(remote_rel)
         if not self.config.enabled:
             manifest["warnings"].append("definition check disabled in the configuration")
@@ -511,10 +579,20 @@ class Preflight:
         groups, placed = self._workspace(index, ws_rel) if ws_rel else ({}, set())
         runtime = self.runtime_labware(index)
         placed = set(placed) | set(runtime)
-        rt_rel = next((p for p, e in index.items() if p.lower().endswith(".xwsp") and e.get("name") == self.config.runtime_workspace), None)
+        rt_rel = next(
+            (
+                p
+                for p, e in index.items()
+                if p.lower().endswith(".xwsp") and e.get("name") == self.config.runtime_workspace
+            ),
+            None,
+        )
         if rt_rel:
-            manifest["runtime_workspace"] = {"file": rt_rel, "sha256": index[rt_rel]["sha256"],
-                                             "labware": {k: v for k, v in sorted(runtime.items()) if k in refs.get("labware", [])}}
+            manifest["runtime_workspace"] = {
+                "file": rt_rel,
+                "sha256": index[rt_rel]["sha256"],
+                "labware": {k: v for k, v in sorted(runtime.items()) if k in refs.get("labware", [])},
+            }
         for lc in refs.get("liquid_classes", []):
             rel = need(lc, ".xlqc", "Liquid class")
             if rel and not index[rel].get("airfca"):
@@ -549,8 +627,13 @@ class Preflight:
         first_seen = False
         for rel, name in sorted(used.items()):
             entry = index[rel]
-            info = {"name": name, "file": rel, "sha256": entry["sha256"], "size": entry["size"],
-                    "stored_as": f"definitions\\versions\\{entry['sha256']}{pathlib.PureWindowsPath(rel).suffix}"}
+            info = {
+                "name": name,
+                "file": rel,
+                "sha256": entry["sha256"],
+                "size": entry["size"],
+                "stored_as": f"definitions\\versions\\{entry['sha256']}{pathlib.PureWindowsPath(rel).suffix}",
+            }
             if rel.lower().endswith(".xcmp") and name in refs.get("tips", []):
                 info["values"] = tip_values(self.pc.read(rel))
             manifest["definitions"].append(info)
@@ -576,7 +659,8 @@ class Preflight:
             names = ", ".join(f"{c['name']} ({r})" for r, c in changes.items())
             raise DefinitionCheckFailed(
                 f"Refused before sending: these definitions changed since they were last accepted: {names}. "
-                f"Check them, then call AcceptDefinitionChanges and send again (record: {where})")
+                f"Check them, then call AcceptDefinitionChanges and send again (record: {where})"
+            )
         if first_seen and not self.dry_run:
             self.pc.write_baseline(base)
         return record
@@ -603,7 +687,8 @@ class RunRecord:
 
     def write_manifest(self, manifest: dict) -> None:
         (self.folder / "manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=1, default=list), encoding="utf-8")
+            json.dumps(manifest, ensure_ascii=False, indent=1, default=list), encoding="utf-8"
+        )
 
     def finish(self, result: dict) -> None:
         result = {"finished": datetime.datetime.now().isoformat(timespec="seconds"), **result}
@@ -618,11 +703,31 @@ class RunRecord:
 
 
 # ---------------------------------------------------------------- liquid class settings for one tip type
-EQ_FIELDS = ("AspiratePipettingSpeed", "DispensePipettingSpeed", "DelayAfterAspiration", "LeadingAirgapVolumeFormular",
-             "TrailingAirgapVolumeFormular", "ExcessVolumeFormular", "ConditioningVolumeFormular", "CorrectionVolumeFormular")
-DET_FIELDS = ("cLLDOnOff", "clldSensitivity", "submergeDepth", "aspirationTrackingOnOff", "dispenseTrackingOnOff",
-              "zPosition", "zOffset", "retractPosition", "retractPositionOffset", "retractSpeed", "moveSpeedOutOfWell",
-              "density", "viscosity")
+EQ_FIELDS = (
+    "AspiratePipettingSpeed",
+    "DispensePipettingSpeed",
+    "DelayAfterAspiration",
+    "LeadingAirgapVolumeFormular",
+    "TrailingAirgapVolumeFormular",
+    "ExcessVolumeFormular",
+    "ConditioningVolumeFormular",
+    "CorrectionVolumeFormular",
+)
+DET_FIELDS = (
+    "cLLDOnOff",
+    "clldSensitivity",
+    "submergeDepth",
+    "aspirationTrackingOnOff",
+    "dispenseTrackingOnOff",
+    "zPosition",
+    "zOffset",
+    "retractPosition",
+    "retractPositionOffset",
+    "retractSpeed",
+    "moveSpeedOutOfWell",
+    "density",
+    "viscosity",
+)
 
 
 def liquid_class_settings(xml: bytes, tip_group: str, part: str = ARM_LIQUID_CLASS_PART) -> dict | None:
@@ -632,13 +737,25 @@ def liquid_class_settings(xml: bytes, tip_group: str, part: str = ARM_LIQUID_CLA
     dev = f"<PipettingDeviceType>{part}</PipettingDeviceType>"
     u = html.unescape
     grp = f"<DiTiTypeGroup>{tip_group}</DiTiTypeGroup>"
-    eq = [b for b in re.findall(r"<Tecan.Core.Pipetting.LiquidClassEquationSet>(.*?)</Tecan.Core.Pipetting.LiquidClassEquationSet>", t, re.S)
-          if dev in b and grp in b]
+    eq = [
+        b
+        for b in re.findall(
+            r"<Tecan.Core.Pipetting.LiquidClassEquationSet>(.*?)</Tecan.Core.Pipetting.LiquidClassEquationSet>", t, re.S
+        )
+        if dev in b and grp in b
+    ]
     if not eq:
         return None
-    out: dict = {"tip_group": tip_group, "device": part,
-                 "equations": {k: u(v) for k, v in re.findall(r"<(\w+)>([^<]*)</\1>", eq[0]) if k in EQ_FIELDS}}
-    for b in re.findall(r"<Tecan.Core.Pipetting.LiquidClassDetectionAndPositioningSet>(.*?)</Tecan.Core.Pipetting.LiquidClassDetectionAndPositioningSet>", t, re.S):
+    out: dict = {
+        "tip_group": tip_group,
+        "device": part,
+        "equations": {k: u(v) for k, v in re.findall(r"<(\w+)>([^<]*)</\1>", eq[0]) if k in EQ_FIELDS},
+    }
+    for b in re.findall(
+        r"<Tecan.Core.Pipetting.LiquidClassDetectionAndPositioningSet>(.*?)</Tecan.Core.Pipetting.LiquidClassDetectionAndPositioningSet>",
+        t,
+        re.S,
+    ):
         if dev in b and grp in b:
             section = (re.search(r"<PipettingSectionName>(\w+)</PipettingSectionName>", b) or [None, "?"])[1]
             pairs = re.findall(r"<Value>([^<]*)</Value>\s*<VariableName>([^<]*)</VariableName>", b)

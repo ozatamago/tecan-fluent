@@ -1,7 +1,8 @@
 """XML of the remaining FluentControl pipetting statements of the 01-07 GUI scripts (stage 4-5).
 
-Each builder starts from a statement of the 01-07 scripts (src/unitelabs/tecan_fluent/data/*_reference.xml, copied
-from tests/fixtures/gui_statements) and only changes values, like features/liquid_handling.py does for GetTips ... DropTips:
+Each builder starts from a statement of the 01-07 scripts (src/unitelabs/tecan_fluent/data/*_reference.xml,
+copied from tests/fixtures/gui_statements) and only changes values, like features/liquid_handling.py does for
+GetTips ... DropTips:
 
 | Statement | Used in | Template |
 |---|---|---|
@@ -24,10 +25,10 @@ the worktable: two plates of 06 that are on the deck at the same time both have 
 
 import re
 
+from ..features.liquid_handling import _set, _set_list, _template, well_index, wells_fields
 from .fluent_backend import BackendError
 from .infinite.xml import _esc
 from .infinite.xml import wrap as _wrap
-from ..features.liquid_handling import _set, _set_list, _template, wells_fields, well_index
 
 WASTE = "FCA Thru Deck Waste Chute_1"
 
@@ -37,6 +38,7 @@ def wrap(obj_xml: str) -> str:
     compared), and FluentControl refuses some statements with line 0 ("The line number has to be grater than 0" for
     WorklistImport; only "Error executing command" for Transfer Individual Volumes; 2026-10-16)."""
     return _wrap(re.sub(r"<LineNumber>0</LineNumber>", "<LineNumber>1</LineNumber>", obj_xml))
+
 
 CLLD_ERRORS = {
     # SiLA parameter -> (element of the statement, error shown by FluentControl)
@@ -70,8 +72,9 @@ def inline_filter_check_xml(channels: list[int]) -> str:
     return wrap(_set(xml, "SelectedTips", str(channel_mask(channels))))
 
 
-def detect_liquid_xml(labware: str, wells: list[str], channels: list[int], rows: int, columns: int,
-                      tip_spacing: float) -> str:
+def detect_liquid_xml(
+    labware: str, wells: list[str], channels: list[int], rows: int, columns: int, tip_spacing: float
+) -> str:
     xml = _template("liha_detectliquid_reference.xml")
     serialized, shown = wells_fields(wells, rows, columns)
     if len(wells) == 1:
@@ -104,6 +107,7 @@ def labware_geometry(xcmp: str) -> dict:
     """Well layout and well size from a labware definition (.xcmp text, unescaped), in the form the Smart Commands
     use (checked against the 03, 04 and 06 statements: wells of 96-well plates are ellipses with the top diameter,
     trough wells are rectangles; a picture cell is the well plus 2 mm on each side unless wells are closer)."""
+
     def num(tag):
         m = re.search(rf"<(?:\w+:)?{tag}>([^<]+)<", xcmp)
         if not m:
@@ -118,7 +122,9 @@ def labware_geometry(xcmp: str) -> dict:
     if diameter is not None:
         kind, height, width = "Ellipse", diameter, diameter
     else:
-        box = next((s for s in shapes if re.search(r"<(?:\w+:)?Width>", s) and re.search(r"<(?:\w+:)?Length>", s)), None)
+        box = next(
+            (s for s in shapes if re.search(r"<(?:\w+:)?Width>", s) and re.search(r"<(?:\w+:)?Length>", s)), None
+        )
         if box is None:
             raise BackendError("The labware definition has no well shape that the Smart Commands can use")
         height = float(re.search(r"Length>([^<]+)<", box).group(1))
@@ -128,8 +134,16 @@ def labware_geometry(xcmp: str) -> dict:
         xspacing = width + 4
     if kind == "Rectangle" or ycount == 1:
         yspacing = height + 4
-    return {"xcount": xcount, "ycount": ycount, "xspacing": round(xspacing, 3), "yspacing": round(yspacing, 3),
-            "shape": kind, "height": height, "width": width, "tips_per_well": tips}
+    return {
+        "xcount": xcount,
+        "ycount": ycount,
+        "xspacing": round(xspacing, 3),
+        "yspacing": round(yspacing, 3),
+        "shape": kind,
+        "height": height,
+        "width": width,
+        "tips_per_well": tips,
+    }
 
 
 def _sub_first(block: str, tag: str, value: str) -> str:
@@ -165,9 +179,13 @@ def _section(xml: str, prefix: str, labware: str, geo: dict, well_indexes: list[
     block = _sub_first(block, "TipsPerWell", str(geo["tips_per_well"]))
     if well_indexes is not None:
         items = "".join(f"<int>{i}</int>\n" for i in well_indexes)
-        block, n = re.subn(r"<SelectedWellIndexes>.*?</SelectedWellIndexes>|<SelectedWellIndexes />",
-                           f"<SelectedWellIndexes>\n{items}</SelectedWellIndexes>" if well_indexes else "<SelectedWellIndexes />",
-                           block, count=1, flags=re.S)
+        block, n = re.subn(
+            r"<SelectedWellIndexes>.*?</SelectedWellIndexes>|<SelectedWellIndexes />",
+            f"<SelectedWellIndexes>\n{items}</SelectedWellIndexes>" if well_indexes else "<SelectedWellIndexes />",
+            block,
+            count=1,
+            flags=re.S,
+        )
         if n != 1:
             raise BackendError(f"Template {prefix} labware has no SelectedWellIndexes")
     if shown is not None and "<SelectedWellsString>" in block:
@@ -190,31 +208,77 @@ def _indexes(wells: list[str], geo: dict) -> list[int]:
     return [well_index(w, geo["ycount"], geo["xcount"]) for w in wells]
 
 
-def reagent_distribution_xml(source: str, source_well: str, source_geo: dict, target: str, target_wells: list[str],
-                             target_geo: dict, volume: float, liquid_class: str, tip_type: str, channels: list[int],
-                             reuse: int, multi: int) -> str:
+def reagent_distribution_xml(
+    source: str,
+    source_well: str,
+    source_geo: dict,
+    target: str,
+    target_wells: list[str],
+    target_geo: dict,
+    volume: float,
+    liquid_class: str,
+    tip_type: str,
+    channels: list[int],
+    reuse: int,
+    multi: int,
+) -> str:
     """Distribute volume from one source well (a trough lane, a tube) into each target well."""
     xml = _template("liha_reagentdistribution_reference.xml")
     xml = _common(xml, tip_type, liquid_class, channels, reuse, multi)
     src = _indexes([source_well], source_geo)
-    xml = _section(xml, "Source", source, source_geo, src, wells_fields([source_well], source_geo["ycount"], source_geo["xcount"])[1].split(" * ")[-1])
+    xml = _section(
+        xml,
+        "Source",
+        source,
+        source_geo,
+        src,
+        wells_fields([source_well], source_geo["ycount"], source_geo["xcount"])[1].split(" * ")[-1],
+    )
     xml = _section(xml, "EmptyTipContent", source, source_geo, None, None)
-    xml = _section(xml, "Target", target, target_geo, _indexes(target_wells, target_geo),
-                   wells_fields(target_wells, target_geo["ycount"], target_geo["xcount"])[1])
+    xml = _section(
+        xml,
+        "Target",
+        target,
+        target_geo,
+        _indexes(target_wells, target_geo),
+        wells_fields(target_wells, target_geo["ycount"], target_geo["xcount"])[1],
+    )
     xml = _set(xml, "TargetVolumePerWell", f"{volume:g}")
     xml = _set(xml, "SampleCount", str(len(target_wells)))
     return wrap(xml)
 
 
-def sample_transfer_xml(source: str, source_wells: list[str], source_geo: dict, target: str, target_wells: list[str],
-                        target_geo: dict, volume: float, liquid_class: str, tip_type: str, channels: list[int]) -> str:
+def sample_transfer_xml(
+    source: str,
+    source_wells: list[str],
+    source_geo: dict,
+    target: str,
+    target_wells: list[str],
+    target_geo: dict,
+    volume: float,
+    liquid_class: str,
+    tip_type: str,
+    channels: list[int],
+) -> str:
     """Move volume from each source well to the target well in the same place of the list (one tip per sample)."""
     xml = _template("liha_sampletransfer_reference.xml")
     xml = _common(xml, tip_type, liquid_class, channels, 1, 1)
-    xml = _section(xml, "Source", source, source_geo, _indexes(source_wells, source_geo),
-                   wells_fields(source_wells, source_geo["ycount"], source_geo["xcount"])[1])
-    xml = _section(xml, "Target", target, target_geo, _indexes(target_wells, target_geo),
-                   wells_fields(target_wells, target_geo["ycount"], target_geo["xcount"])[1])
+    xml = _section(
+        xml,
+        "Source",
+        source,
+        source_geo,
+        _indexes(source_wells, source_geo),
+        wells_fields(source_wells, source_geo["ycount"], source_geo["xcount"])[1],
+    )
+    xml = _section(
+        xml,
+        "Target",
+        target,
+        target_geo,
+        _indexes(target_wells, target_geo),
+        wells_fields(target_wells, target_geo["ycount"], target_geo["xcount"])[1],
+    )
     xml = _set(xml, "TargetVolumePerWell", f"{volume:g}")
     xml = _set(xml, "SampleCount", str(len(source_wells)))
     return wrap(_set(xml, "Pooling", "False"))
@@ -226,8 +290,18 @@ def individual_volumes_file(rows: list[tuple[int, int, float]]) -> str:
     return "Source well index;Target well index;Volume [ul]\r\n" + "".join(f"{s};{t};{v:g}\r\n" for s, t, v in rows)
 
 
-def individual_volumes_xml(source: str, source_geo: dict, target: str, target_geo: dict, file_path: str,
-                           liquid_class: str, tip_type: str, channels: list[int], reuse: int, multi: int) -> str:
+def individual_volumes_xml(
+    source: str,
+    source_geo: dict,
+    target: str,
+    target_geo: dict,
+    file_path: str,
+    liquid_class: str,
+    tip_type: str,
+    channels: list[int],
+    reuse: int,
+    multi: int,
+) -> str:
     xml = _template("liha_transferindividualvolumes_reference.xml")
     xml = _common(xml, tip_type, liquid_class, channels, reuse, multi)
     # The file names wells by number; the selections are the wells it may use, all wells of each labware as in 04
@@ -249,11 +323,14 @@ def worklist_csv(rows: list[tuple[str, str, str, str, float]]) -> str:
     for r in rows:
         if any("," in str(x) for x in r):
             raise BackendError(f"Worklist values must not contain commas: {r}")
-    return "SourceLabel,SourcePosition,DestLabel,DestPosition,Volume\r\n" + \
-        "".join(f"{a},{b},{c},{d},{v:g}\r\n" for a, b, c, d, v in rows)
+    return "SourceLabel,SourcePosition,DestLabel,DestPosition,Volume\r\n" + "".join(
+        f"{a},{b},{c},{d},{v:g}\r\n" for a, b, c, d, v in rows
+    )
 
 
-def worklist_xml(csv_path: str, gwl_path: str, tip_type: str, liquid_class: str, channels: list[int]) -> list[tuple[str, str]]:
+def worklist_xml(
+    csv_path: str, gwl_path: str, tip_type: str, liquid_class: str, channels: list[int]
+) -> list[tuple[str, str]]:
     """The three statements 02 and 07 use: import the CSV into a worklist file, load it, execute it."""
     imp = _template("worklist_import_reference.xml")
     imp = _set(imp, "CsvExpressionOrFilename", quoted(csv_path))
@@ -262,8 +339,15 @@ def worklist_xml(csv_path: str, gwl_path: str, tip_type: str, liquid_class: str,
     load = _template("worklist_load_reference.xml")
     load = _set(load, "WorklistPath", quoted(gwl_path))
     load = re.sub(r"TOOLNAME:[^<]*<", lambda _: f"TOOLNAME:{_esc(tip_type)}<", load, count=1)
-    load = re.sub(r"(<LiquidClassName>)[^<]*(</LiquidClassName>)(\s*<IsLiquidClassNameByExpressionEnabled>False)",
-                  lambda m: m.group(1) + _esc(liquid_class) + m.group(2) + m.group(3), load, count=1)
+    load = re.sub(
+        r"(<LiquidClassName>)[^<]*(</LiquidClassName>)(\s*<IsLiquidClassNameByExpressionEnabled>False)",
+        lambda m: m.group(1) + _esc(liquid_class) + m.group(2) + m.group(3),
+        load,
+        count=1,
+    )
     load = _set_list(load, "SelectedTips", [c - 1 for c in channels], "System.Int32")
-    return [("WorklistImport", wrap(imp)), ("LoadWorklist", wrap(load)),
-            ("ExecuteWorklist", wrap(_template("worklist_execute_reference.xml")))]
+    return [
+        ("WorklistImport", wrap(imp)),
+        ("LoadWorklist", wrap(load)),
+        ("ExecuteWorklist", wrap(_template("worklist_execute_reference.xml"))),
+    ]

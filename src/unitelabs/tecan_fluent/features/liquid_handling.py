@@ -1,15 +1,17 @@
 """FluentControl's pipetting statements of the Air FCA as SiLA commands (stage 4-4).
 
-GetTips, Aspirate, Dispense, Mix, DropTips and MoveArm each send one FluentControl statement. The XML is the 1-channel form
-that ran on the instrument in August 2026 (tests/fixtures/liha_verified); only the values change (labware, wells,
-volumes, liquid class, channels, tip type). tests/test_gui_statements.py checks that these forms have the same
-structure as the statements of the 01-07 GUI scripts.
+GetTips, Aspirate, Dispense, Mix, DropTips and MoveArm each send one FluentControl statement. The XML is the
+1-channel form that ran on the instrument in August 2026 (tests/fixtures/liha_verified); only the values change
+(labware, wells, volumes, liquid class, channels, tip type). tests/io/test_gui_statements.py checks that these forms
+have the same structure as the statements of the 01-07 GUI scripts.
 
 They only work inside a run opened with RunController.StartRun, so that FluentControl keeps the mounted tips from one
-command to the next, and on labware added in that run with LabwareController.AddLabware or already registered on FluentControl's
-RuntimeWorkspace (so the type and its well layout are known). Refused before sending (lessons from the instrument):
+command to the next, and on labware added in that run with LabwareController.AddLabware or already registered on
+FluentControl's RuntimeWorkspace (so the type and its well layout are known). Refused before sending (lessons from the
+instrument):
 
-- a second Aspirate with the same tips (it always failed in August 2026; one aspiration per tip, many dispenses are fine)
+- a second Aspirate with the same tips (it always failed in August 2026; one aspiration per tip, many dispenses are
+  fine)
 - Aspirate / Dispense / Mix without tips, GetTips with tips, EndRun with tips (state mix-ups)
 - a volume above what the tip can hold (MaxNettoVolumeForTransferPhase of the tip definition)
 - a liquid class without settings for the mounted tip type on the Air FCA
@@ -28,14 +30,22 @@ from unitelabs.cdk import sila
 
 from ..io.definitions import DefinitionCheckFailed, _unescape, liquid_class_settings, tip_values
 from ..io.fluent_backend import BackendError, FluentOdtcBackend
-from .infinite import _with_progress
 from ..io.infinite.xml import _esc, wrap
+from .infinite import _with_progress
 
 DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
-TIP_TYPES = ("FCA, 10ul SBS", "FCA, 50ul SBS", "FCA, 200ul SBS", "FCA, 200ul Filtered SBS", "FCA, 1000ul SBS",
-             "FCA, 1000ul Filtered SBS")
+TIP_TYPES = (
+    "FCA, 10ul SBS",
+    "FCA, 50ul SBS",
+    "FCA, 200ul SBS",
+    "FCA, 200ul Filtered SBS",
+    "FCA, 1000ul SBS",
+    "FCA, 1000ul Filtered SBS",
+)
 """Tip types used by the 01-07 GUI scripts (50ul SBS only by the worklists of 02 and 07)."""
-BAD_RACKS = {"FCA_ 1000ul SBS[001]": "the tips in this rack do not fit and fell off (August 2026); use FCA_ 1000ul SBS[002]"}
+BAD_RACKS = {
+    "FCA_ 1000ul SBS[001]": "the tips in this rack do not fit and fell off (August 2026); use FCA_ 1000ul SBS[002]"
+}
 WASTE = "FCA Thru Deck Waste Chute_1"
 TIP_SPACING = 9  # mm; every verified and GUI statement on 96-well plates and troughs uses 9
 
@@ -47,12 +57,12 @@ $fs = [System.IO.File]::Open($f.FullName, 'Open', 'Read', 'ReadWrite'); $t = (Ne
 foreach ($m in [regex]::Matches($t, 'TimeStamp="([0-9-]+ [0-9:.]+)"[^>]*Message="channel (\d+): detected volume ([0-9.]+) ul')) {
   if ($m.Groups[1].Value -ge '__SINCE__') { $m.Groups[2].Value + ' ' + $m.Groups[3].Value }
 }
-"""
+"""  # noqa: E501 - PowerShell sent as is
 """Reads FluentControl's log on the Fluent PC for the volumes Detect Liquid found (the statement returns nothing)."""
 
 FILTER_RESULTS_PS1 = DETECTED_VOLUMES_PS1.replace(
-    "Message=\"channel (\\d+): detected volume ([0-9.]+) ul')) {", "Message=\"(Channel \\d+ : Filter [^\"]*)')) {").replace(
-    "{ $m.Groups[2].Value + ' ' + $m.Groups[3].Value }", "{ $m.Groups[2].Value }")
+    "Message=\"channel (\\d+): detected volume ([0-9.]+) ul')) {", 'Message="(Channel \\d+ : Filter [^"]*)\')) {'
+).replace("{ $m.Groups[2].Value + ' ' + $m.Groups[3].Value }", "{ $m.Groups[2].Value }")
 """The same for the verdicts of the inline filter check ("Channel 1 : Filter OK (passed) (...)", 2026-10-16)."""
 
 
@@ -88,10 +98,10 @@ def corrected_volume(formula: str, volume: float) -> float:
     if not m:
         return volume
     nums = [float(x) for x in m.group(1).split(",")]
-    pairs = sorted(zip(nums[1::2], nums[0::2]))  # (delivered, set)
+    pairs = sorted(zip(nums[1::2], nums[0::2], strict=False))  # (delivered, set)
     if len(pairs) < 2:
         return volume
-    for (d0, s0), (d1, s1) in zip(pairs, pairs[1:]):
+    for (d0, s0), (d1, s1) in zip(pairs, pairs[1:], strict=False):
         if volume <= d1 or (d1, s1) == pairs[-1]:
             return s0 + (volume - d0) * (s1 - s0) / (d1 - d0)
     return volume
@@ -106,8 +116,14 @@ def planned_aspiration(equations: dict, volume: float, dispenses: int) -> dict:
     excess = _evaluate(equations.get("ExcessVolumeFormular", "0") or "0", total)
     conditioning = _evaluate(equations.get("ConditioningVolumeFormular", "0") or "0", total)
     known = excess is not None and conditioning is not None
-    return {"dispensed": total, "corrected": round(corrected, 2), "excess": excess, "conditioning": conditioning,
-            "liquid_in_tip": round(corrected + (excess or 0) + (conditioning or 0), 2), "formulas_understood": known}
+    return {
+        "dispensed": total,
+        "corrected": round(corrected, 2),
+        "excess": excess,
+        "conditioning": conditioning,
+        "liquid_in_tip": round(corrected + (excess or 0) + (conditioning or 0), 2),
+        "formulas_understood": known,
+    }
 
 
 class LiquidHandlingFailed(Exception):
@@ -153,7 +169,7 @@ def wells_fields(wells: list[str], rows: int, columns: int) -> tuple[str, str]:
     names = [w.strip().upper() for w in wells]
     if len(set(idx)) == 1:
         return f"{idx[0]};" * len(idx), f"{len(idx)} * {names[0]}"
-    if all(b - a == 1 for a, b in zip(idx, idx[1:])):
+    if all(b - a == 1 for a, b in zip(idx, idx[1:], strict=False)):
         return f"{idx[0]}>1>{idx[-1]};", f"{names[0]} - {names[-1]}"
     return "".join(f"{i};" for i in idx), ", ".join(names)
 
@@ -183,11 +199,25 @@ def drop_tips_xml(channels: list[int]) -> str:
     return wrap(_set(xml, "LabwareName", WASTE))
 
 
-def pipetting_xml(kind: str, labware: str, wells: list[str], volumes: list[float], liquid_class: str,
-                  channels: list[int], rows: int, columns: int, cycles: int | None = None) -> str:
+def pipetting_xml(
+    kind: str,
+    labware: str,
+    wells: list[str],
+    volumes: list[float],
+    liquid_class: str,
+    channels: list[int],
+    rows: int,
+    columns: int,
+    cycles: int | None = None,
+) -> str:
     """Aspirate / Dispense / Mix of the given channels; wells and volumes are one per channel."""
-    xml = _template({"Aspirate": "liha_aspirate_reference.xml", "Dispense": "liha_dispense_reference.xml",
-                     "Mix": "liha_mix_reference.xml"}[kind])
+    xml = _template(
+        {
+            "Aspirate": "liha_aspirate_reference.xml",
+            "Dispense": "liha_dispense_reference.xml",
+            "Mix": "liha_mix_reference.xml",
+        }[kind]
+    )
     serialized, shown = wells_fields(wells, rows, columns)
     xml = _set_list(xml, "Volumes", [f"{v:g}" for v in volumes], "System.String")
     xml = _set(xml, "LiquidClassNameBySelection", liquid_class)
@@ -261,8 +291,9 @@ class LiquidHandling(sila.Feature):
     # ---- checks
     def _need_run(self) -> None:
         if not self.backend.run_open:
-            raise LiquidHandlingFailed("Start a run first (RunController.StartRun): FluentControl must keep the tips "
-                                       "mounted between commands")
+            raise LiquidHandlingFailed(
+                "Start a run first (RunController.StartRun): FluentControl must keep the tips mounted between commands"
+            )
 
     @staticmethod
     def _channels(channels: list[int]) -> list[int]:
@@ -284,13 +315,16 @@ class LiquidHandling(sila.Feature):
             known = {}
         if labware in known and known[labware]["type"]:
             return known[labware]["type"]
-        raise LiquidHandlingFailed(f"{labware} is neither added in this run nor registered on FluentControl's "
-                                   "worktable; add it with LabwareController.AddLabware")
+        raise LiquidHandlingFailed(
+            f"{labware} is neither added in this run nor registered on FluentControl's "
+            "worktable; add it with LabwareController.AddLabware"
+        )
 
     async def _send(self, label: str, xml: str, status: sila.Status, extra: dict | None = None, post=None) -> None:
         try:
-            await _with_progress(status, 1, lambda report: self.backend.run_steps([(label, xml)], report, label, extra,
-                                                                                  post))
+            await _with_progress(
+                status, 1, lambda report: self.backend.run_steps([(label, xml)], report, label, extra, post)
+            )
         except BackendError as exc:
             raise LiquidHandlingFailed(str(exc)) from None
 
@@ -353,15 +387,32 @@ class LiquidHandling(sila.Feature):
             values = tip_values(self._definition(tip_type, ".xcmp"))
         except DefinitionCheckFailed as exc:
             raise LiquidHandlingFailed(str(exc)) from None
-        await self._send(f"GetTips {tip_type} ch{channels}" + (f" from {rack}" if rack else ""),
-                         get_tips_xml(tip_type, channels, rack), status, {"tip": {"type": tip_type, **values}})
+        await self._send(
+            f"GetTips {tip_type} ch{channels}" + (f" from {rack}" if rack else ""),
+            get_tips_xml(tip_type, channels, rack),
+            status,
+            {"tip": {"type": tip_type, **values}},
+        )
         for c in channels:
-            self.backend.tips[c] = {"type": tip_type, "group": values.get("DiTiTypeGroup", ""),
-                                    "capacity": float(values.get("MaxNettoVolumeForTransferPhase", 0) or 0),
-                                    "aspirated": False, "volume": 0.0}
+            self.backend.tips[c] = {
+                "type": tip_type,
+                "group": values.get("DiTiTypeGroup", ""),
+                "capacity": float(values.get("MaxNettoVolumeForTransferPhase", 0) or 0),
+                "aspirated": False,
+                "volume": 0.0,
+            }
 
-    async def _pipette(self, kind: str, labware: str, wells: list[str], volumes: list[float], liquid_class: str,
-                       channels: list[int], status: sila.Status, cycles: int | None = None) -> None:
+    async def _pipette(
+        self,
+        kind: str,
+        labware: str,
+        wells: list[str],
+        volumes: list[float],
+        liquid_class: str,
+        channels: list[int],
+        status: sila.Status,
+        cycles: int | None = None,
+    ) -> None:
         self._need_run()
         self._refresh()
         channels = self._channels(channels)
@@ -375,13 +426,16 @@ class LiquidHandling(sila.Feature):
         tips = [self.backend.tips[c] for c in channels]
         labware_type = self._labware_type(labware)
         if any(t["type"] == "FCA, 10ul SBS" for t in tips) and "PCR" in labware_type:
-            raise LiquidHandlingFailed("10 ul tips do not reach the bottom of a PCR plate on the 7 mm nest (2026-10-09); "
-                                       "use 50 ul or larger")
-        for c, t, v in zip(channels, tips, volumes):
+            raise LiquidHandlingFailed(
+                "10 ul tips do not reach the bottom of a PCR plate on the 7 mm nest (2026-10-09); use 50 ul or larger"
+            )
+        for c, t, v in zip(channels, tips, volumes, strict=False):
             if kind == "Aspirate":
                 if t["aspirated"]:
-                    raise LiquidHandlingFailed(f"Channel {c} already aspirated with these tips; a second aspiration "
-                                               "with the same tips fails. DropTips and GetTips first")
+                    raise LiquidHandlingFailed(
+                        f"Channel {c} already aspirated with these tips; a second aspiration "
+                        "with the same tips fails. DropTips and GetTips first"
+                    )
                 if t["capacity"] and v > t["capacity"]:
                     raise LiquidHandlingFailed(f"{v:g} ul is more than a {t['type']} tip holds ({t['capacity']:g} ul)")
             elif kind == "Dispense" and v > t["volume"] + 1e-9:
@@ -394,22 +448,34 @@ class LiquidHandling(sila.Feature):
             for group in sorted({t["group"] for t in tips}):
                 s = liquid_class_settings(self._definition(liquid_class, ".xlqc"), group)
                 if s is None:
-                    raise LiquidHandlingFailed(f"Liquid class '{liquid_class}' has no Air FCA settings for {group} tips")
+                    raise LiquidHandlingFailed(
+                        f"Liquid class '{liquid_class}' has no Air FCA settings for {group} tips"
+                    )
                 settings[group] = s
             xml = pipetting_xml(kind, labware, wells, volumes, liquid_class, channels, rows, columns, cycles)
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
-        label = f"{kind} {'/'.join(f'{v:g}' for v in volumes)} ul {labware} {','.join(wells)} ch{channels} ({liquid_class})"
+        label = (
+            f"{kind} {'/'.join(f'{v:g}' for v in volumes)} ul {labware} {','.join(wells)} ch{channels} ({liquid_class})"
+        )
         await self._send(label, xml, status, {"liquid_class_settings": {liquid_class: settings}})
-        for t, v in zip(tips, volumes):
+        for t, v in zip(tips, volumes, strict=False):
             if kind == "Aspirate":
                 t["aspirated"], t["volume"] = True, t["volume"] + v
             elif kind == "Dispense":
                 t["volume"] = max(0.0, t["volume"] - v)
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def aspirate(self, labware: str, wells: list[str], volumes: list[float], liquid_class: str,
-                       channels: list[int], *, status: sila.Status) -> None:
+    async def aspirate(
+        self,
+        labware: str,
+        wells: list[str],
+        volumes: list[float],
+        liquid_class: str,
+        channels: list[int],
+        *,
+        status: sila.Status,
+    ) -> None:
         """
         Aspirate with the given channels (one aspiration per set of tips). MOVES the arm.
 
@@ -423,8 +489,16 @@ class LiquidHandling(sila.Feature):
         await self._pipette("Aspirate", labware, wells, volumes, liquid_class, channels, status)
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def dispense(self, labware: str, wells: list[str], volumes: list[float], liquid_class: str,
-                       channels: list[int], *, status: sila.Status) -> None:
+    async def dispense(
+        self,
+        labware: str,
+        wells: list[str],
+        volumes: list[float],
+        liquid_class: str,
+        channels: list[int],
+        *,
+        status: sila.Status,
+    ) -> None:
         """
         Dispense with the given channels (several dispenses from one aspiration are fine). MOVES the arm.
 
@@ -438,8 +512,17 @@ class LiquidHandling(sila.Feature):
         await self._pipette("Dispense", labware, wells, volumes, liquid_class, channels, status)
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def mix(self, labware: str, wells: list[str], volumes: list[float], liquid_class: str, channels: list[int],
-                  cycles: int, *, status: sila.Status) -> None:
+    async def mix(
+        self,
+        labware: str,
+        wells: list[str],
+        volumes: list[float],
+        liquid_class: str,
+        channels: list[int],
+        cycles: int,
+        *,
+        status: sila.Status,
+    ) -> None:
         """
         Mix by aspirating and dispensing in place. MOVES the arm.
 
@@ -500,20 +583,27 @@ class LiquidHandling(sila.Feature):
         xcmp = _unescape(self._definition(labware_type, ".xcmp").decode("utf-8-sig", errors="replace"))
         return labware_type, labware_geometry(xcmp)
 
-    def _tip_and_class(self, tip_type: str, liquid_class: str, volumes: list[float], labware_types: list[str],
-                       dispenses: int = 1) -> dict:
+    def _tip_and_class(
+        self, tip_type: str, liquid_class: str, volumes: list[float], labware_types: list[str], dispenses: int = 1
+    ) -> dict:
         """Checks for statements that take their own tips (Smart Commands, worklists); returns the record extras.
         dispenses: dispenses per aspiration; the liquid in the tip then is checked against the tip size."""
         if tip_type not in TIP_TYPES:
             raise LiquidHandlingFailed(f"TipType must be one of {', '.join(TIP_TYPES)}")
         if tip_type.startswith("FCA, 1000ul SBS"):
-            raise LiquidHandlingFailed("FluentControl picks the rack itself here and may take FCA_ 1000ul SBS[001], whose "
-                                       "tips do not fit (August 2026); use 1000 ul Filtered tips or GetTips with a rack")
+            raise LiquidHandlingFailed(
+                "FluentControl picks the rack itself here and may take FCA_ 1000ul SBS[001], whose "
+                "tips do not fit (August 2026); use 1000 ul Filtered tips or GetTips with a rack"
+            )
         if self.backend.tips:
-            raise LiquidHandlingFailed(f"Channels {sorted(self.backend.tips)} have tips; this command takes and drops "
-                                       "its own tips, so DropTips first")
+            raise LiquidHandlingFailed(
+                f"Channels {sorted(self.backend.tips)} have tips; this command takes and drops "
+                "its own tips, so DropTips first"
+            )
         if tip_type == "FCA, 10ul SBS" and any("PCR" in t for t in labware_types):
-            raise LiquidHandlingFailed("10 ul tips do not reach the bottom of a PCR plate on the 7 mm nest (2026-10-09)")
+            raise LiquidHandlingFailed(
+                "10 ul tips do not reach the bottom of a PCR plate on the 7 mm nest (2026-10-09)"
+            )
         if any(v <= 0 for v in volumes):
             raise LiquidHandlingFailed("Volumes must be above 0")
         values = tip_values(self._definition(tip_type, ".xcmp"))
@@ -525,12 +615,17 @@ class LiquidHandling(sila.Feature):
         plan = planned_aspiration(settings["equations"], max(volumes), max(1, int(dispenses)))
         if capacity and plan["liquid_in_tip"] > capacity:
             raise LiquidHandlingFailed(
-                f"One aspiration would take up about {plan['liquid_in_tip']:g} ul ({plan['dispensed']:g} ul to dispense, "
-                f"corrected to {plan['corrected']:g}, plus excess {plan['excess']} and conditioning "
+                f"One aspiration would take up about {plan['liquid_in_tip']:g} ul "
+                f"({plan['dispensed']:g} ul to dispense, corrected to {plan['corrected']:g}, "
+                f"plus excess {plan['excess']} and conditioning "
                 f"{plan['conditioning']} ul from '{liquid_class}'); a {tip_type} tip holds {capacity:g} ul. "
-                "Use fewer dispenses per aspiration or larger tips")
-        return {"tip": {"type": tip_type, **values}, "liquid_class_settings": {liquid_class: {group: settings}},
-                "planned_aspiration": plan}
+                "Use fewer dispenses per aspiration or larger tips"
+            )
+        return {
+            "tip": {"type": tip_type, **values},
+            "liquid_class_settings": {liquid_class: {group: settings}},
+            "planned_aspiration": plan,
+        }
 
     def _put_file(self, name: str, text: str) -> str:
         """Save a file the statement reads (worklist, volume list) in the open run's record on the Fluent PC."""
@@ -570,8 +665,9 @@ class LiquidHandling(sila.Feature):
         return [ln.strip() for ln in text.decode("utf-8-sig", errors="replace").splitlines() if ln.strip()]
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def detect_liquid(self, labware: str, wells: list[str], channels: list[int], *,
-                            status: sila.Status) -> list[float]:
+    async def detect_liquid(
+        self, labware: str, wells: list[str], channels: list[int], *, status: sila.Status
+    ) -> list[float]:
         """
         Check that there is liquid in the given wells with the mounted tips (liquid level detection, as 02 does before
         pipetting primers). Fails if FluentControl reports an error. MOVES the arm.
@@ -634,10 +730,18 @@ class LiquidHandling(sila.Feature):
         return found
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def set_liquid_detection_error_handling(self, aspirate: str, contact_dispense: str,
-                                                  aspiration_supervision: str, retract_supervision: str,
-                                                  pressure_aspirate: str, pressure_dispense: str, pmp_aspiration: str,
-                                                  *, status: sila.Status) -> None:
+    async def set_liquid_detection_error_handling(
+        self,
+        aspirate: str,
+        contact_dispense: str,
+        aspiration_supervision: str,
+        retract_supervision: str,
+        pressure_aspirate: str,
+        pressure_dispense: str,
+        pmp_aspiration: str,
+        *,
+        status: sila.Status,
+    ) -> None:
         """
         Set what FluentControl does on pipetting errors for the rest of the run (as 06 does before each step). Each
         is "UseMicroscriptSettings" (the liquid class decides; also when empty), "AspirateAvailable" or
@@ -655,23 +759,41 @@ class LiquidHandling(sila.Feature):
         from ..io.smart_xml import set_clld_error_handling_xml
 
         self._need_run()
-        given = {"Aspirate": aspirate, "ContactDispense": contact_dispense,
-                 "AspirationSupervision": aspiration_supervision, "RetractSupervision": retract_supervision,
-                 "PressureAspirate": pressure_aspirate, "PressureDispense": pressure_dispense,
-                 "PmpAspiration": pmp_aspiration}
+        given = {
+            "Aspirate": aspirate,
+            "ContactDispense": contact_dispense,
+            "AspirationSupervision": aspiration_supervision,
+            "RetractSupervision": retract_supervision,
+            "PressureAspirate": pressure_aspirate,
+            "PressureDispense": pressure_dispense,
+            "PmpAspiration": pmp_aspiration,
+        }
         actions = {k: (v or "UseMicroscriptSettings") for k, v in given.items()}
         try:
             xml = set_clld_error_handling_xml(actions)
         except BackendError as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         changed = {k: v for k, v in actions.items() if v != "UseMicroscriptSettings"}
-        await self._send(f"SetClldErrorHandling {changed or 'all UseMicroscriptSettings'}", xml, status,
-                         {"error_handling": actions})
+        await self._send(
+            f"SetClldErrorHandling {changed or 'all UseMicroscriptSettings'}", xml, status, {"error_handling": actions}
+        )
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def distribute_reagent(self, source: str, source_well: str, target: str, target_wells: list[str],
-                                 volume: float, liquid_class: str, tip_type: str, channels: list[int],
-                                 max_tip_reuse: int, max_multi_dispense: int, *, status: sila.Status) -> list[str]:
+    async def distribute_reagent(
+        self,
+        source: str,
+        source_well: str,
+        target: str,
+        target_wells: list[str],
+        volume: float,
+        liquid_class: str,
+        tip_type: str,
+        channels: list[int],
+        max_tip_reuse: int,
+        max_multi_dispense: int,
+        *,
+        status: sila.Status,
+    ) -> list[str]:
         """
         Put the same volume of one reagent into many wells (FluentControl's Reagent Distribution, used by 03, 06 and
         07). FluentControl takes the tips, aspirates, dispenses and drops the tips itself. MOVES the arm.
@@ -705,22 +827,51 @@ class LiquidHandling(sila.Feature):
         try:
             source_type, source_geo = self._geometry(source)
             target_type, target_geo = self._geometry(target)
-            extra = self._tip_and_class(tip_type, liquid_class, [volume], [target_type],
-                                        min(max_multi_dispense, len(target_wells)))
-            xml = reagent_distribution_xml(source, source_well, source_geo, target, target_wells, target_geo, volume,
-                                           liquid_class, tip_type, channels, max_tip_reuse, max_multi_dispense)
+            extra = self._tip_and_class(
+                tip_type, liquid_class, [volume], [target_type], min(max_multi_dispense, len(target_wells))
+            )
+            xml = reagent_distribution_xml(
+                source,
+                source_well,
+                source_geo,
+                target,
+                target_wells,
+                target_geo,
+                volume,
+                liquid_class,
+                tip_type,
+                channels,
+                max_tip_reuse,
+                max_multi_dispense,
+            )
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra["labware_pictures"] = {source: source_geo, target: target_geo}
         post, result = self._expansion_reader()
-        await self._send(f"ReagentDistribution {volume:g} ul {source} {source_well} -> {target} "
-                         f"{len(target_wells)} wells ({liquid_class}, {tip_type})", xml, status, extra, post)
+        await self._send(
+            f"ReagentDistribution {volume:g} ul {source} {source_well} -> {target} "
+            f"{len(target_wells)} wells ({liquid_class}, {tip_type})",
+            xml,
+            status,
+            extra,
+            post,
+        )
         return result["steps"]
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def transfer_samples(self, source: str, source_wells: list[str], target: str, target_wells: list[str],
-                               volume: float, liquid_class: str, tip_type: str, channels: list[int], *,
-                               status: sila.Status) -> list[str]:
+    async def transfer_samples(
+        self,
+        source: str,
+        source_wells: list[str],
+        target: str,
+        target_wells: list[str],
+        volume: float,
+        liquid_class: str,
+        tip_type: str,
+        channels: list[int],
+        *,
+        status: sila.Status,
+    ) -> list[str]:
         """
         Move the same volume from each source well to the target well at the same place in the lists, with a new tip
         for every sample (FluentControl's Sample Transfer, used by 06). MOVES the arm.
@@ -749,21 +900,48 @@ class LiquidHandling(sila.Feature):
             source_type, source_geo = self._geometry(source)
             target_type, target_geo = self._geometry(target)
             extra = self._tip_and_class(tip_type, liquid_class, [volume], [source_type, target_type])
-            xml = sample_transfer_xml(source, source_wells, source_geo, target, target_wells, target_geo, volume,
-                                      liquid_class, tip_type, channels)
+            xml = sample_transfer_xml(
+                source,
+                source_wells,
+                source_geo,
+                target,
+                target_wells,
+                target_geo,
+                volume,
+                liquid_class,
+                tip_type,
+                channels,
+            )
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra["labware_pictures"] = {source: source_geo, target: target_geo}
         post, result = self._expansion_reader()
-        await self._send(f"SampleTransfer {volume:g} ul {source} -> {target} {len(source_wells)} samples "
-                         f"({liquid_class}, {tip_type})", xml, status, extra, post)
+        await self._send(
+            f"SampleTransfer {volume:g} ul {source} -> {target} {len(source_wells)} samples "
+            f"({liquid_class}, {tip_type})",
+            xml,
+            status,
+            extra,
+            post,
+        )
         return result["steps"]
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def transfer_individual_volumes(self, source: str, target: str, source_wells: list[str],
-                                          target_wells: list[str], volumes: list[float], liquid_class: str,
-                                          tip_type: str, channels: list[int], max_tip_reuse: int,
-                                          max_multi_dispense: int, *, status: sila.Status) -> tuple[str, list[str]]:
+    async def transfer_individual_volumes(
+        self,
+        source: str,
+        target: str,
+        source_wells: list[str],
+        target_wells: list[str],
+        volumes: list[float],
+        liquid_class: str,
+        tip_type: str,
+        channels: list[int],
+        max_tip_reuse: int,
+        max_multi_dispense: int,
+        *,
+        status: sila.Status,
+    ) -> tuple[str, list[str]]:
         """
         Move a different volume for each pair of wells (FluentControl's Transfer Individual Volumes, used by 04). The
         lists are written to a file in the run's record, which FluentControl reads. MOVES the arm.
@@ -794,27 +972,58 @@ class LiquidHandling(sila.Feature):
         try:
             source_type, source_geo = self._geometry(source)
             target_type, target_geo = self._geometry(target)
-            extra = self._tip_and_class(tip_type, liquid_class, list(volumes), [target_type],
-                                        min(max_multi_dispense, len(volumes)))
-            rows = [(well_index(s, source_geo["ycount"], source_geo["xcount"]) + 1,
-                     well_index(t, target_geo["ycount"], target_geo["xcount"]) + 1, float(v))
-                    for s, t, v in zip(source_wells, target_wells, volumes)]
+            extra = self._tip_and_class(
+                tip_type, liquid_class, list(volumes), [target_type], min(max_multi_dispense, len(volumes))
+            )
+            rows = [
+                (
+                    well_index(s, source_geo["ycount"], source_geo["xcount"]) + 1,
+                    well_index(t, target_geo["ycount"], target_geo["xcount"]) + 1,
+                    float(v),
+                )
+                for s, t, v in zip(source_wells, target_wells, volumes, strict=False)
+            ]
             text = individual_volumes_file(rows)
             path = self._put_file("individual_volumes.csv", text)
-            xml = individual_volumes_xml(source, source_geo, target, target_geo, path, liquid_class, tip_type,
-                                         channels, max_tip_reuse, max_multi_dispense)
+            xml = individual_volumes_xml(
+                source,
+                source_geo,
+                target,
+                target_geo,
+                path,
+                liquid_class,
+                tip_type,
+                channels,
+                max_tip_reuse,
+                max_multi_dispense,
+            )
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra.update({"volume_file": path, "volume_file_text": text})
         post, result = self._expansion_reader()
-        await self._send(f"TransferIndividualVolumes {source} -> {target} {len(volumes)} transfers "
-                         f"({liquid_class}, {tip_type})", xml, status, extra, post)
+        await self._send(
+            f"TransferIndividualVolumes {source} -> {target} {len(volumes)} transfers ({liquid_class}, {tip_type})",
+            xml,
+            status,
+            extra,
+            post,
+        )
         return path, result["steps"]
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
-    async def run_worklist(self, source_labware: list[str], source_wells: list[str], target_labware: list[str],
-                           target_wells: list[str], volumes: list[float], tip_type: str, liquid_class: str,
-                           channels: list[int], *, status: sila.Status) -> tuple[str, list[str]]:
+    async def run_worklist(
+        self,
+        source_labware: list[str],
+        source_wells: list[str],
+        target_labware: list[str],
+        target_wells: list[str],
+        volumes: list[float],
+        tip_type: str,
+        liquid_class: str,
+        channels: list[int],
+        *,
+        status: sila.Status,
+    ) -> tuple[str, list[str]]:
         """
         Pipette a list of transfers as a FluentControl worklist (as 02, 05 and 07 do with a CSV file chosen on the
         instrument PC). Each line moves a volume from a source well to a target well, with a new tip per line.
@@ -841,15 +1050,22 @@ class LiquidHandling(sila.Feature):
         channels = self._channels(channels)
         n = len(volumes)
         if not n or not (len(source_labware) == len(source_wells) == len(target_labware) == len(target_wells) == n):
-            raise LiquidHandlingFailed("Give the same number of source labware, source wells, target labware, "
-                                       "target wells and volumes (at least one line)")
+            raise LiquidHandlingFailed(
+                "Give the same number of source labware, source wells, target labware, "
+                "target wells and volumes (at least one line)"
+            )
         try:
             types = {name: self._labware_type(name) for name in {*source_labware, *target_labware}}
-            for name, w in [*zip(source_labware, source_wells), *zip(target_labware, target_wells)]:
+            for name, w in [
+                *zip(source_labware, source_wells, strict=False),
+                *zip(target_labware, target_wells, strict=False),
+            ]:
                 rows, columns = self._layout(types[name])
                 well_index(w, rows, columns)  # refuses wells outside the labware
             extra = self._tip_and_class(tip_type, liquid_class, list(volumes), list(types.values()))
-            text = worklist_csv(list(zip(source_labware, source_wells, target_labware, target_wells, map(float, volumes))))
+            text = worklist_csv(
+                list(zip(source_labware, source_wells, target_labware, target_wells, map(float, volumes), strict=False))
+            )
             csv_path = self._put_file("worklist.csv", text)
             steps = worklist_xml(csv_path, csv_path[:-4] + ".gwl", tip_type, liquid_class, channels)
         except (BackendError, DefinitionCheckFailed) as exc:
@@ -857,8 +1073,13 @@ class LiquidHandling(sila.Feature):
         extra.update({"worklist_file": csv_path, "worklist_text": text, "worklist_labware": types})
         post, result = self._expansion_reader()
         try:
-            await _with_progress(status, len(steps), lambda report: self.backend.run_steps(
-                steps, report, f"Worklist {n} lines ({liquid_class}, {tip_type})", extra, post))
+            await _with_progress(
+                status,
+                len(steps),
+                lambda report: self.backend.run_steps(
+                    steps, report, f"Worklist {n} lines ({liquid_class}, {tip_type})", extra, post
+                ),
+            )
         except BackendError as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         return csv_path, result["steps"]
@@ -866,5 +1087,7 @@ class LiquidHandling(sila.Feature):
     @sila.UnobservableProperty()
     async def get_mounted_tips(self) -> list[str]:
         """Tips mounted in the open run, e.g. "channel 1: FCA, 200ul SBS, aspirated, holds 50 ul"."""
-        return [f"channel {c}: {t['type']}, {'aspirated' if t['aspirated'] else 'fresh'}, holds {t['volume']:g} ul"
-                for c, t in sorted(self.backend.tips.items())]
+        return [
+            f"channel {c}: {t['type']}, {'aspirated' if t['aspirated'] else 'fresh'}, holds {t['volume']:g} ul"
+            for c, t in sorted(self.backend.tips.items())
+        ]

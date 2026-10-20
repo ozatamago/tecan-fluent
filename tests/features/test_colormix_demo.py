@@ -39,16 +39,19 @@ def test_wells_are_checked():
 
 def test_summary_line_per_well():
     planned = plan_wells(["A1", "B1"], [0, 20], [0, 0], [0, 0], 150)
-    asc = AscResult(labels=["Label1", "Label2", "Label3"],
-                    values=[{"A1": 0.041, "B1": 0.9}, {"A1": 0.04, "B1": 0.5}, {"A1": 0.039, "B1": 0.05}], metadata=[])
+    asc = AscResult(
+        labels=["Label1", "Label2", "Label3"],
+        values=[{"A1": 0.041, "B1": 0.9}, {"A1": 0.04, "B1": 0.5}, {"A1": 0.039, "B1": 0.05}],
+        metadata=[],
+    )
     assert summarize(planned, asc, asc.labels) == [
         "A1: 430 nm 0.0410, 520 nm 0.0400, 630 nm 0.0390 (water 150 ul)",
-        "B1: 430 nm 0.9000, 520 nm 0.5000, 630 nm 0.0500 (water 150, red 20 ul)"]
+        "B1: 430 nm 0.9000, 520 nm 0.5000, 630 nm 0.0500 (water 150, red 20 ul)",
+    ]
 
 
 def test_the_command_in_a_dry_run(monkeypatch):
-    from fakes import FakePc, _S, vx
-
+    from fakes import _S, FakePc
     from unitelabs.tecan_fluent.apps.fluent780 import Fluent780ConnectorConfig, build_features
     from unitelabs.tecan_fluent.io.infinite.reader import FluentInfiniteReader
 
@@ -61,8 +64,9 @@ def test_the_command_in_a_dry_run(monkeypatch):
             return idx
 
     demo.liquid.pc = Pc()
-    monkeypatch.setattr(demo.liquid, "_labware_type", lambda name: "96 Well Flat_Custom" if "Flat" in name
-                        else "4 Well SBS Trough")
+    monkeypatch.setattr(
+        demo.liquid, "_labware_type", lambda name: "96 Well Flat_Custom" if "Flat" in name else "4 Well SBS Trough"
+    )
 
     async def methods(self):
         return ["OFML_ColorMix3.mth"]
