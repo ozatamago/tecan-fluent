@@ -11,11 +11,14 @@ cp config/config.fluent780.example.json config.fluent780.json   # set fluent.dry
 uv run connector start --app unitelabs.tecan_fluent:create_app -cfg config.fluent780.json
 ```
 
+The feature identifiers changed in October 2026 (device first, e.g. `jp.riken.bdr/tecan.fluent/RunControl/v1`); the
+old -> new table is in [docs/feature_identifiers.md](docs/feature_identifiers.md).
+
 ## Architecture
 
 ```
 SiLA 2 client (UniteLabs App, Python, etc.)
-   │  jp.riken.bdr/{fluent,odtc,platereader}/*
+   │  jp.riken.bdr/{tecan.fluent,tecan.fluent.arm,tecan.fluent.gripper,inheco.odtc,tecan.infinite,...}/*
    ▼
 This connector (on the Fluent PC as the task OFML_Fluent780Server, or on another computer)
    │  SiLA 2: PrepareMethod / RunMethod / ExecuteCommand(XML)
@@ -27,66 +30,81 @@ FluentControl (method OFML_ApiHost) → device drivers (SiLA-ODTC, Magellan, RGA
 ```
 
 Each operation starts one FluentControl run (`OFML_ApiHost`), sends its statements or device macros, and ends the run
-(unless a run was opened with `RunController.StartRun`, which later commands then share). Before anything is sent,
+(unless a run was opened with `RunControl.StartRun`, which later commands then share). Before anything is sent,
 every FluentControl definition the XML uses (liquid classes, tips, labware, locations, the worktable, device macros) is
-checked and recorded on the Fluent PC under `C:\Users\Tecan\OFML` (`io/definitions.py`).
+checked and recorded on the Fluent PC under `C:\Users\Tecan\OFML` (`io/fluentcontrol/definitions.py`).
 
 Things that FluentControl does not return through its API are read on the Fluent PC (over SSH, or directly when the
 connector runs there): the ODTC temperatures from the driver log, Magellan's ASC result files, FluentControl's own log
 (what a Smart Command or worklist expanded into), and the deck cameras.
 
-### Servers
+### Devices and servers
 
-The combined server (since 2026-10-15) is the one to use. It puts all Features on a single server with a single back
-end that sends commands to FluentControl, and enforces **one operation at a time**: an operation on another device is
-rejected with "Another operation is running (...)". `StatusController.CurrentOperation` shows what is running.
+The combined server "Tecan Fluent 780 (All devices)" (since 2026-10-15) is the one to use. It puts all Features on a
+single server with a single back end that sends commands to FluentControl, and enforces **one operation at a time**:
+an operation on another device is rejected with "Another operation is running (...)". `Status.CurrentOperation` shows
+what is running.
 
-| Server | Port | `--app` | Example config |
+Every device also has a server of its own (`apps/<app>.py`). Each feature's category names its device and its display
+name starts with the device, so the UniteLabs App shows the device first.
+
+| Device | Server (`apps/<app>.py`) | Port | Features (display name) |
 |---|---|---|---|
-| "Tecan Fluent 780" (combined) | 50060 | `unitelabs.tecan_fluent:create_app` | `config/config.fluent780.example.json`, `config/config.fluent780.fluentpc.example.json` (on the Fluent PC) |
-| "Inheco ODTC (Fluent 780)" | 50061 | `unitelabs.tecan_fluent.apps.odtc:create_app` | `config/config.example.json` |
-| "Tecan Infinite 200 PRO (Fluent 780)" | 50063 | `unitelabs.tecan_fluent.apps.infinite_fluent:create_app` | `config/config.infinite.example.json` |
-| "Tecan Infinite 200 PRO (USB)" | 50065 | `unitelabs.tecan_fluent.apps.infinite_usb:create_usb_app` | `config/config.infinite_usb.example.json` |
+| All devices | "Tecan Fluent 780 (All devices)" (`fluent780_all`; also `unitelabs.tecan_fluent:create_app`) | 50060 | all of the features below |
+| Fluent 780 | "Tecan Fluent 780" (`fluent780`) | 50062 | `RunControl` (Fluent - Run (Start / End)), `Status` (Fluent - Status), `LiquidHandling` (FCA Arm - Liquid Handling), `PlateTransfer` (RGA Gripper - Move & Return Plate), `Labware` (RGA Gripper - Labware, Lids & Fingers), `DeckCamera` (Deck Cameras) |
+| Inheco ODTC 96 | "Inheco ODTC (Fluent 780)" (`odtc`; the stand-alone server is the inheco-odtc repository) | 50061 | `Door` (ODTC - Door), `Methods` (ODTC - Temperature Programs), `Temperatures` (ODTC - Temperatures), `Status` |
+| Tecan Infinite 200 PRO | "Tecan Infinite 200 PRO" (`infinite`) | 50063 | `Tray` (Infinite - Tray), `Absorbance` (Infinite - Absorbance), `PlateHandling` (Infinite - Plate In / Out (RGA)), `Status` |
+| BioShake Q1 | "BioShake" (`bioshake`) | 50064 | `BioShake` (BioShake - Shake & Heat), `Status` |
+| Inheco Incubator Shaker DWP | "Inheco Shaking Incubator" (`inheco_incubator`) | 50065 | `ShakingIncubator` (Inheco Incubator - Shake & Heat), `Status` |
+| Inheco CPLC (3 positions) | "Inheco CPLC (3 positions)" (`cplc`) | 50066 | `CoolingHeatingPlates` (Cooling / Heating Plates (CPLC 1-3)), `Status` |
+| Incubator1 (6 Nest Incubator Shaking) | "Incubator1 (6 positions)" (`incubator1`) | 50067 | `Incubator1` (Incubator1 - Temperature, Shaker & Door), `Status` |
+| Demo | "ColorMix Demo" (`colormix_demo`) | 50068 | `ColorMix` (Demo - Color Mix & Measure), `RunControl`, `Status`, `Absorbance`, `LiquidHandling`, `DeckCamera` |
+| Stand-alone Infinite 200 PRO (USB) | "Tecan Infinite 200 PRO (USB)" (`infinite_usb`, `create_usb_app`) | 50069 | `Tray`, `Absorbance` |
 
-The per-device servers (ODTC, Infinite) are still available, but **do not run them at the same time as the combined
-server**: they do not know about each other's operations and could end someone else's run through the UniteLabs
-connector's "last opened channel". The ODTC server and the Infinite server also each enforce "one operation at a time"
-independently; do not send commands to both at the same time.
+Feature identifiers are `jp.riken.bdr/<category>/<identifier>/v1` (the table with categories is in
+[docs/feature_identifiers.md](docs/feature_identifiers.md)). Feature definitions are the same in every server, so
+clients only need to change the address. The commands of each Feature are listed under [Usage](#usage).
 
-### Features
-
-| Feature | Device | Servers |
-|---|---|---|
-| `RgaController`, `LabwareController` | RGA plate gripper, FluentControl's labware statements | combined |
-| `LiquidHandling` | Air FCA pipetting arm | combined |
-| `DoorController`, `MethodController`, `TemperatureController`, `StatusController` | Inheco ODTC 96 | combined, ODTC |
-| `TrayController`, `AbsorbanceReader` | Infinite 200 PRO | combined, Infinite, USB |
-| `FluentPlateHandling` | Infinite 200 PRO with the RGA | combined, Infinite |
-| `BioShakeController`, `ShakingIncubatorController`, `TemperaturePositionController`, `Incubator1Controller` | temperature-controlled and shaking devices | combined |
-| `ColorMixDemo` | pipetting and the reader together (hackathon demo) | combined |
-| `DeckCamera` | the three deck-check cameras | combined |
-| `RunController` | runs shared by several commands | combined |
-
-Feature names and contents are the same in every server, so clients only need to change the address. Features for
-newly added devices are prefixed with the device name (e.g. `BioShakeController`); the ODTC's `TemperatureController`
-keeps its original name. The commands of each Feature are listed under [Usage](#usage).
+**Do not run the combined server and a device server that talks to FluentControl at the same time**: each server
+enforces "one operation at a time" only for itself, so they do not know about each other's operations and could end
+someone else's run through the UniteLabs connector's "last opened channel".
 
 ### Package layout
 
 ```
 src/unitelabs/tecan_fluent/
-  __init__.py   create_app and Fluent780ConnectorConfig of the combined server (loaded on first use)
+  __init__.py   create_app and Fluent780AllConnectorConfig of the combined server (loaded on first use)
   __main__.py   python -m unitelabs.tecan_fluent
-  apps/         server assemblies: fluent780.py (combined), odtc.py, infinite_fluent.py, infinite_usb.py
-  features/     the SiLA Features (one per module) and their errors
-  io/           FluentControl back end, definition checks and records, Fluent PC access, XML builders,
-                the Infinite back ends, the deck camera driver, the labware position record
+  apps/         server assemblies, one per device plus the combined one:
+                fluent780_all.py fluent780.py odtc.py infinite.py infinite_usb.py bioshake.py inheco_incubator.py
+                cplc.py incubator1.py colormix_demo.py, and common.py (shared parts, no config class)
+  features/     the SiLA Features (one per module) and their errors, one folder per device:
+    fluent/           run_control.py status.py
+      arm/            liquid_handling.py
+      gripper/        plate_transfer.py labware.py
+      camera/         deck_camera.py
+    odtc/             door.py methods.py temperatures.py errors.py
+    infinite/         tray.py absorbance.py plate_handling.py errors.py
+    bioshake/         bioshake.py
+    inheco_incubator/ shaking_incubator.py
+    cplc/             cooling_heating_plates.py
+    incubator1/       incubator1.py
+    demo/             colormix.py
+    device_macro.py   shared by the four devices driven by one legacy driver macro per command
+  io/           everything that talks to FluentControl, the Fluent PC or a device, one folder per device:
+    fluentcontrol/    backend.py definitions.py remote.py fc_log.py progress.py errors.py statements.py
+    fluent/arm/       statements.py (GetTips ... DropTips) smart_xml.py (Smart Commands, worklists)
+    fluent/gripper/   statements.py (RGA, AddLabware, fingers) labware_tracker.py
+    fluent/camera/    deck_cameras.py
+    odtc/             macros.py method_store.py
+    infinite/         asc.py reader.py xml.py plr_reader.py
+    bioshake/ inheco_incubator/ cplc/ incubator1/   macros.py (the device macro XML)
   data/         reference statements from the 01-07 GUI scripts and the ODTC method store copy
-config/         example configurations
+config/         example configurations: <app>.fluentpc.example.json (Fluent PC) and the dry-run config*.example.json
 scripts/        extract_gui_macros.py, extract_gui_statements.py
 scripts/windows/  PowerShell and Python scripts that run on the Fluent PC
-tests/          features/, io/, apps/ and fixtures/
-docs/           reference notes (docs/gui_statements.md)
+tests/          features/, io/ and apps/ (the same device folders) and fixtures/
+docs/           reference notes (docs/gui_statements.md, docs/feature_identifiers.md)
 ```
 
 The UniteLabs CDK assumes there is only one subclass of `ConnectorBaseConfig` in the process. Each server assembly has
@@ -130,15 +148,17 @@ the development tools (ruff, pre-commit, commitizen).
 
 ### Configuration
 
-Copy an example from `config/` to the repository root and adjust it. The local configurations (`config.json`,
-`config.fluent780.json`, `config.infinite.json`, `config.infinite_usb.json` and their `*.dryrun.json` variants) are
-not in Git.
+Copy an example from `config/` and adjust it. `config/<app>.fluentpc.example.json` is the configuration of each
+server on the Fluent PC; the `config/config*.example.json` files are dry-run examples for another computer. The local
+configurations (`config/<app>.json`, and in the repository root `config.json`, `config.fluent780.json`,
+`config.infinite.json`, `config.infinite_usb.json` and their `*.dryrun.json` variants) are not in Git.
 
 ```bash
-cp config/config.fluent780.example.json config.fluent780.json       # combined server
-cp config/config.example.json config.json                           # ODTC server
-cp config/config.infinite.example.json config.infinite.json         # Infinite server
+cp config/config.fluent780.example.json config.fluent780.json       # combined server (dry run)
+cp config/config.example.json config.json                           # ODTC server (dry run)
+cp config/config.infinite.example.json config.infinite.json         # Infinite server (dry run)
 cp config/config.infinite_usb.example.json config.infinite_usb.json # stand-alone USB Infinite
+cp config/bioshake.fluentpc.example.json config/bioshake.json       # a device server on the Fluent PC
 ```
 
 - With `fluent.dry_run: true`, the XML is built and logged but nothing is sent to the Fluent. `dry_run_seconds` adds
@@ -146,15 +166,26 @@ cp config/config.infinite_usb.example.json config.infinite_usb.json # stand-alon
 - **Set `sila_server.hostname` to the LAN address (e.g. `10.5.1.213`).** With `0.0.0.0`, mDNS also advertises
   `127.0.0.1`, and the UniteLabs App on the Fluent PC ends up connecting to itself. If you do not want mDNS
   advertisement, set `discovery` to `null`.
-- Only one server with the same UUID may run at a time.
+- Only one server with the same UUID may run at a time. Every app has a fixed UUID and port (in its config class and
+  its example configs).
+- On the Fluent PC, every server has its own `fluent.definitions.local_dir` (`C:\Users\Tecan\OFML\state\<app>`;
+  the combined server keeps `C:\Users\Tecan\OFML\connector_state`), so servers never share pending record files.
+  The records themselves all go to `C:\Users\Tecan\OFML\records`.
 
 ### Starting
 
 ```bash
 uv run connector start --app unitelabs.tecan_fluent:create_app -cfg config.fluent780.json
 uv run connector start --app unitelabs.tecan_fluent.apps.odtc:create_app -cfg config.json
-uv run connector start --app unitelabs.tecan_fluent.apps.infinite_fluent:create_app -cfg config.infinite.json
+uv run connector start --app unitelabs.tecan_fluent.apps.infinite:create_app -cfg config.infinite.json
 uv run connector start --app unitelabs.tecan_fluent.apps.infinite_usb:create_usb_app -cfg config.infinite_usb.json
+```
+
+A device server is started the same way, with the module name from [Devices and servers](#devices-and-servers):
+
+```bash
+uv run connector start --app unitelabs.tecan_fluent.apps.<app>:create_app -cfg config/<app>.json
+uv run connector start --app unitelabs.tecan_fluent.apps.bioshake:create_app -cfg config/bioshake.json   # e.g.
 ```
 
 The combined server can also be started with `uv run python -m unitelabs.tecan_fluent [config path]` (default
@@ -167,8 +198,10 @@ uv run pytest
 ```
 
 The tests connect to neither the devices nor the Fluent PC (`tests/conftest.py` replaces every SSH, file and camera
-access). `tests/features/` tests the Features, `tests/io/` the back ends and XML builders, `tests/apps/` the server
-assemblies; `tests/fixtures/` holds XML and files from the instrument. They check that the XML sent is identical,
+access). `tests/features/` tests the Features, `tests/io/` the back ends and XML builders (both in the same device
+folders as the source), `tests/apps/` the server assemblies (including that every app serves exactly the feature
+identifiers and display names of [docs/feature_identifiers.md](docs/feature_identifiers.md) and that every example
+config loads, with unique UUIDs and ports); `tests/fixtures/` holds XML and files from the instrument. They check that the XML sent is identical,
 character for character, to what succeeded on the instrument, that dangerous macros are rejected, that the method list
 loads, the PreMethod pairing, and the checks before pipetting.
 
@@ -193,13 +226,16 @@ directly.
 git clone https://github.com/ozatamago/tecan-fluent.git C:\Users\Tecan\OFML\connector
 cd C:\Users\Tecan\OFML\connector
 uv sync
-copy config\config.fluent780.fluentpc.example.json config.fluent780.json   # hostname 10.5.1.156, ssh_target "local"
+copy config\fluent780_all.fluentpc.example.json config.fluent780.json   # hostname 10.5.1.156, ssh_target "local"
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\start_connector.ps1
 ```
 
 - `scripts/windows/start_connector.ps1` starts `unitelabs.tecan_fluent:create_app` with
   `C:\Users\Tecan\OFML\connector\config.fluent780.json` and writes the server output to
   `C:\Users\Tecan\OFML\connector_state\server_<time>.log`.
+- `start_connector.ps1 -App <app>` starts a device server instead, with `config\<app>.json` (copied from
+  `config\<app>.fluentpc.example.json`; `-Config` gives another path) and the log in
+  `C:\Users\Tecan\OFML\state\<app>`.
 - Only one server with the same UUID may run: stop it on the other computer first.
 - Records that cannot be stored at once wait in `fluent.definitions.local_dir` (`C:\Users\Tecan\OFML\connector_state`).
 - The labware positions the RGA commands remember are kept on the Fluent PC
@@ -216,19 +252,24 @@ schtasks /run /tn OFML_Fluent780Server    # start
 schtasks /end /tn OFML_Fluent780Server    # stop (also stop the server processes if they remain)
 ```
 
+`register_server_task.ps1 -App <app> [-Config <path>]` registers the task `OFML_<App>Server` for a device server,
+e.g. `-App bioshake` -> `OFML_BioShakeServer` (the Fluent-only server `fluent780` is `OFML_Fluent780OnlyServer`,
+because task names ignore case and `OFML_Fluent780Server` is the combined server).
+
 The task runs the script at the path it was registered with. After an update that moves `start_connector.ps1`
 (it moved from `windows\` to `scripts\windows\`), register the task again.
 
 ### SSH tunnel
 
-Port 50060 is not opened in the firewall (the server is unencrypted and anyone who reaches it can move the robot).
+The ports (50060 and up) are not opened in the firewall (the server is unencrypted and anyone who reaches it can move the robot).
 Other computers use an SSH tunnel, together with the UniteLabs App's ports:
 
 ```bash
 ssh -N -L '3000:[::1]:3000' -L 3004:localhost:3004 -L 50060:10.5.1.156:50060 Tecan@10.5.1.156
 ```
 
-Then the server is `localhost:50060` and the App `http://localhost:3000`.
+Then the server is `localhost:50060` and the App `http://localhost:3000`. Add `-L <port>:10.5.1.156:<port>` for a
+device server.
 
 ### Updating
 
@@ -239,13 +280,15 @@ Push from the development computer, then on the Fluent PC `git pull`, stop and s
 Use the server from the UniteLabs App or any SiLA 2 client.
 
 - When entering string values in the UniteLabs App, do not add quotes (the quotes become part of the value).
+- After the feature identifiers changed (see [docs/feature_identifiers.md](docs/feature_identifiers.md)), register
+  the server in the UniteLabs App again.
 - After adding Commands, make the UniteLabs App reload the Features
   (`PATCH http://10.5.1.156:3004/api/servers/<UUID>/features/update`, or reload the page).
 - **There is no authentication or encryption.** Anyone who reaches the server can move the instrument.
 
 (P) marks a Property. All others are Commands; the Observable ones report progress and remaining time every 2 seconds.
 
-### RGA (`RgaController`, combined server)
+### RGA gripper (`PlateTransfer`, combined server and Fluent server)
 
 | Command / Property | Description |
 |---|---|
@@ -263,18 +306,18 @@ Use the server from the UniteLabs App or any SiLA 2 client.
 - **Verified on the instrument from the UniteLabs App on 2026-10-15**: `Nest7mm_Pos[6]` → `Regrip_Pos[1]` → back to
   `Nest7mm_Pos[6]` in a separate run.
 
-### Temperature-controlled and shaking devices (combined server)
+### Temperature-controlled and shaking devices (combined server and the device servers)
 
 | Feature | Command | Range (as restricted by the connector) |
 |---|---|---|
-| `BioShakeController` | `SetTemperature(Temperature)` / `TemperatureOff` | 4–70 °C |
+| `BioShake` | `SetTemperature(Temperature)` / `TemperatureOff` | 4–70 °C |
 | | `LockPlate` / `UnlockPlate` | |
 | | `ShakeOn(Speed)` / `ShakeOff` | 1000, 1200, 1400, 1600, 1800 or 2000 rpm |
-| `ShakingIncubatorController` (Inheco Incubator Shaker DWP) | `SetTemperature(Temperature)` | 20–60 °C |
+| `ShakingIncubator` (Inheco Incubator Shaker DWP) | `SetTemperature(Temperature)` | 20–60 °C |
 | | `Close` | |
 | | `ShakeOn` / `ShakeOff` | fixed preset `14,1.0,14,1.0,180` |
-| `TemperaturePositionController` (the 3 CPLC positions, inhecoMTC) | `SetTemperature(Slot, Temperature)` / `TurnOff(Slot)` | 4–70 °C, slots 1–3 |
-| `Incubator1Controller` (6 Nest Incubator Shaking) | `SetTemperature(Temperature)` (all positions) | 20–50 °C |
+| `CoolingHeatingPlates` (the 3 CPLC positions, inhecoMTC) | `SetTemperature(Slot, Temperature)` / `TurnOff(Slot)` | 4–70 °C, slots 1–3 |
+| `Incubator1` (6 Nest Incubator Shaking) | `SetTemperature(Temperature)` (all positions) | 20–50 °C |
 | | `CloseDoor` | |
 | | `StartShaker(Frequency)` / `StopShaker` | 1.0–8.5 Hz |
 
@@ -283,7 +326,8 @@ Use the server from the UniteLabs App or any SiLA 2 client.
 - BioShake lock/unlock/shake, Inheco close/shake and Incubator1 door/shaker (5 Hz) were verified on the instrument on
   2026-10-15 (no plate loaded; each shake ran for about 5 s).
 - The basis for each argument's meaning, and the values whose meaning is unknown (fixed to the same values as the GUI
-  scripts), are documented at the top of `src/unitelabs/tecan_fluent/features/temperature_devices.py`.
+  scripts), are documented at the top of the device's `macros.py` in `src/unitelabs/tecan_fluent/io/` (`bioshake/`,
+  `inheco_incubator/`, `cplc/`, `incubator1/`).
 - Tecan's cleanup (Sub_Cleanup) returns the Inheco incubator and Incubator1 to 25 °C, sends TempOff to the BioShake,
   and turns the CPLC off.
 
@@ -291,13 +335,13 @@ Use the server from the UniteLabs App or any SiLA 2 client.
 
 | Feature | Command / Property | Description | Verified on the instrument (2026-10-15) |
 |---|---|---|---|
-| `DoorController` | `OpenDoor` / `CloseDoor` | Open/close the door (drawer) | door motion 9–10 s, total 18–48 s |
-| `MethodController` | `Methods` (P) | The 5 PreMethods and 7 Methods registered on the device, with estimated durations | reads the copy taken on 2026-08-10 |
+| `Door` | `OpenDoor` / `CloseDoor` | Open/close the door (drawer) | door motion 9–10 s, total 18–48 s |
+| `Methods` | `Methods` (P) | The 5 PreMethods and 7 Methods registered on the device, with estimated durations | reads the copy taken on 2026-08-10 |
 | | `RunPreMethod(PreMethod)` | Preheat. 7 min 45 s regardless of target temperature | `ini25` 466.3 s, 467.5 s |
 | | `RunMethod(Method)` | Temperature program. Requires the matching PreMethod immediately before | `test` 16.0 s |
 | | `LastPreMethod` (P) | The last PreMethod this connector completed | |
-| `TemperatureController` | `ReadTemperatures` | Block, lid and other temperatures (°C) | about 12 s |
-| `StatusController` | `Ready` / `Busy` / `CurrentOperation` / `FluentControlState` / `ActiveDialogs` (P) | Whether a command can be accepted right now, and what is running | |
+| `Temperatures` | `ReadTemperatures` | Block, lid and other temperatures (°C) | about 12 s |
+| `Status` | `Ready` / `Busy` / `CurrentOperation` / `FluentControlState` / `ActiveDialogs` (P) | Whether a command can be accepted right now, and what is running | |
 
 Only one ODTC operation can run at a time.
 
@@ -332,11 +376,11 @@ The back end (FluentControl runs via the UniteLabs connector) is shared with the
 
 | Feature | Command / Property | Description |
 |---|---|---|
-| `TrayController` | `OpenTray` / `CloseTray` | Open/close the tray (`Magellan_Open` / `Magellan_Close`) |
-| `AbsorbanceReader` | `Methods` (P) | Measurement files in `Magellan Pro\mth` on the Fluent PC |
+| `Tray` | `OpenTray` / `CloseTray` | Open/close the tray (`Magellan_Open` / `Magellan_Close`) |
+| `Absorbance` | `Methods` (P) | Measurement files in `Magellan Pro\mth` on the Fluent PC |
 | | `MeasureLoadedPlate(Method)` | Measure the plate already inside and return the values as labels × 96 wells |
 | | `ReadAbsorbance(Wavelength)` | Return the OD of 96 wells at one wavelength. The Fluent version supports only wavelengths listed in the `infinite.wavelength_methods` setting |
-| `FluentPlateHandling` | `MeasureWorktablePlate(Labware, Method)` | Move a plate registered on the worktable (by name) into the reader, measure it, and return it to its original position. One run |
+| `PlateHandling` | `MeasureWorktablePlate(Labware, Method)` | Move a plate registered on the worktable (by name) into the reader, measure it, and return it to its original position. One run |
 | | `MeasurePlate(LabwareType, Location, Site, Method)` | Temporarily register an unregistered plate and do the same (**not verified on the instrument**) |
 
 - Loading, measurement and unloading are done in a single run because FluentControl forgets labware positions when a
@@ -354,8 +398,8 @@ The back end (FluentControl runs via the UniteLabs connector) is shared with the
 ### Infinite 200 PRO stand-alone (USB server, PyLabRobot)
 
 A server for an Infinite 200 PRO that is not built into a Fluent, connected by USB to a Mac or Linux PC.
-**The `TrayController` and `AbsorbanceReader` definitions are identical to the Fluent version**, so callers can use
-the same Commands. There is no `FluentPlateHandling`.
+**The `Tray` and `Absorbance` definitions are identical to the Fluent version**, so callers can use the same
+Commands. There is no `PlateHandling`.
 
 | Command | Behaviour in the USB version |
 |---|---|
@@ -372,9 +416,9 @@ the same Commands. There is no `FluentPlateHandling`.
   replace the PyLabRobot back end with a fake, and with a dry run. It was confirmed that, with no reader attached, it
   fails with "USB device not found".
 
-### Pipetting, labware, runs, cameras and the demo (combined server)
+### Pipetting, labware, runs, cameras and the demo (combined server, Fluent server and demo server)
 
-`LiquidHandling`, `LabwareController`, `RunController`, `DeckCamera` and `ColorMixDemo` describe their commands in
+`LiquidHandling`, `Labware`, `RunControl`, `DeckCamera` and `ColorMix` describe their commands in
 their Feature and Command descriptions (shown in the UniteLabs App); the background is in the module docstrings under
 `src/unitelabs/tecan_fluent/features/` and `src/unitelabs/tecan_fluent/io/`.
 
