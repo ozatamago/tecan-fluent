@@ -6,9 +6,9 @@ Only one backend that sends commands to FluentControl (FluentOdtcBackend) is cre
 The backend allows only one operation at a time, so ODTC and Infinite operations queue up automatically, and one
 server can no longer finish the channel of another server's run (2026-10-15, ODTC and Infinite servers merged).
 
-Feature names and contents are the same as in the separate ODTC and Infinite servers; clients only need to change the
-address. Features for devices added from now on are prefixed with the device name (e.g. BioShakeController) to avoid
-name clashes.
+Each feature's category names its device (tecan.fluent, inheco.odtc, tecan.infinite, ...) and its display name
+starts with the device, so the UniteLabs App shows the device first. docs/feature_identifiers.md maps the old
+identifiers to the new ones.
 """
 
 import collections.abc
@@ -17,22 +17,22 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig, sila
 
 from .. import __version__
-from ..features.colormix_demo import ColorMixDemo
+from ..features.colormix_demo import ColorMix
 from ..features.deck_camera import DeckCamera
-from ..features.door_controller import DoorController
-from ..features.infinite import AbsorbanceReader, FluentPlateHandling, TrayController
-from ..features.labware_controller import LabwareController
+from ..features.door_controller import Door
+from ..features.infinite import Absorbance, PlateHandling, Tray
+from ..features.labware_controller import Labware
 from ..features.liquid_handling import LiquidHandling
-from ..features.method_controller import MethodController
-from ..features.rga_controller import RgaController
-from ..features.run_controller import RunController
-from ..features.status_controller import StatusController
-from ..features.temperature_controller import TemperatureController
+from ..features.method_controller import Methods
+from ..features.rga_controller import PlateTransfer
+from ..features.run_controller import RunControl
+from ..features.status_controller import Status
+from ..features.temperature_controller import Temperatures
 from ..features.temperature_devices import (
-    BioShakeController,
-    Incubator1Controller,
-    ShakingIncubatorController,
-    TemperaturePositionController,
+    BioShake,
+    CoolingHeatingPlates,
+    Incubator1,
+    ShakingIncubator,
 )
 from ..io.deck_cameras import DeckCameraConfig, DeckCameras
 from ..io.definitions import FluentPc
@@ -84,28 +84,28 @@ def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
     liquid = LiquidHandling(backend)
     return [
         # RGA
-        RgaController(backend, tracker),
-        LabwareController(backend, tracker),
+        PlateTransfer(backend, tracker),
+        Labware(backend, tracker),
         liquid,
         # ODTC
-        DoorController(backend),
-        MethodController(backend),
-        TemperatureController(backend),
+        Door(backend),
+        Methods(backend),
+        Temperatures(backend),
         # Infinite 200 PRO
-        TrayController(reader),
-        AbsorbanceReader(reader),
-        FluentPlateHandling(reader, tracker),
+        Tray(reader),
+        Absorbance(reader),
+        PlateHandling(reader, tracker),
         # Devices with temperature control (used in 01-07)
-        BioShakeController(backend),
-        ShakingIncubatorController(backend),
-        TemperaturePositionController(backend),
-        Incubator1Controller(backend),
+        BioShake(backend),
+        ShakingIncubator(backend),
+        CoolingHeatingPlates(backend),
+        Incubator1(backend),
         # Demo
-        ColorMixDemo(backend, reader, liquid),
+        ColorMix(backend, reader, liquid),
         # Overall
         DeckCamera(cameras),
-        RunController(backend),
-        StatusController(backend),
+        RunControl(backend),
+        Status(backend),
     ]
 
 

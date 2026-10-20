@@ -10,9 +10,9 @@ Each command sends one FluentControl statement, built from the same statement in
   as in 03 line 76 and 07 line 124)
 - GetFingers / DropFingers: CgaGetFingers / CgaDropFingers (the RGA picks up or puts back its gripper fingers)
 
-They only work inside a run opened with RunController.StartRun: FluentControl forgets labware added or moved when a
+They only work inside a run opened with RunControl.StartRun: FluentControl forgets labware added or moved when a
 run ends, so a sequence (add a plate, move it, put a lid on it, ...) must stay in one run. Labware that the
-RgaController tracks across runs (MoveLabware / ReturnLabware) is refused here, so the two never disagree.
+PlateTransfer tracks across runs (MoveLabware / ReturnLabware) is refused here, so the two never disagree.
 """
 
 import pathlib
@@ -78,31 +78,37 @@ class LabwareCommandFailed(Exception):
     """The labware command was refused or failed. The description says why."""
 
 
-class LabwareController(sila.Feature):
+class Labware(sila.Feature):
     """
     FluentControl's labware statements, one command each: register labware, move it with the RGA (plate gripper),
     put lids on and off, and pick up or put back the gripper fingers.
 
-    Use them between RunController.StartRun and EndRun: FluentControl forgets labware added or moved when a run
-    ends. Labware handled by RgaController.MoveLabware (tracked across runs) cannot be moved here.
+    Use them between RunControl.StartRun and EndRun: FluentControl forgets labware added or moved when a run
+    ends. Labware handled by PlateTransfer.MoveLabware (tracked across runs) cannot be moved here.
     TransferLabware, MoveLabwareToBase, PutLidOn, GetFingers and DropFingers MOVE the arm.
     """
 
     def __init__(self, backend: FluentOdtcBackend, tracker: LabwareTracker | None = None):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.fluent.gripper",
+            identifier="Labware",
+            name="RGA Gripper - Labware, Lids & Fingers",
+            version="1.0",
+        )
         self.backend = backend
         self.tracker = tracker
 
     def _check(self, *labware: str) -> None:
         if not self.backend.run_open:
             raise LabwareCommandFailed(
-                "Start a run first (RunController.StartRun): FluentControl forgets labware positions when a run ends"
+                "Start a run first (RunControl.StartRun): FluentControl forgets labware positions when a run ends"
             )
         if self.tracker is not None:
             for name in labware:
                 if name in self.tracker.config.labware:
                     raise LabwareCommandFailed(
-                        f"{name} is tracked by RgaController; move it with MoveLabware / ReturnLabware"
+                        f"{name} is tracked by PlateTransfer; move it with MoveLabware / ReturnLabware"
                     )
 
     async def _send(self, label: str, xml: str, status: sila.Status) -> None:

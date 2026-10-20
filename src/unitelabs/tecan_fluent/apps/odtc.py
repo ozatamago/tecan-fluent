@@ -9,10 +9,10 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
-from ..features.door_controller import DoorController
-from ..features.method_controller import MethodController
-from ..features.status_controller import StatusController
-from ..features.temperature_controller import TemperatureController
+from ..features.door_controller import Door
+from ..features.method_controller import Methods
+from ..features.status_controller import Status
+from ..features.temperature_controller import Temperatures
 from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 
 
@@ -38,8 +38,8 @@ async def create_app(config: OdtcConnectorConfig) -> collections.abc.AsyncGenera
 
     app = Connector(config)
     backend = FluentOdtcBackend(config.fluent)  # door and method share one backend, one operation at a time
-    app.register(DoorController(backend))
-    app.register(MethodController(backend))
-    app.register(TemperatureController(backend))
-    app.register(StatusController(backend))
+    app.register(Door(backend))
+    app.register(Methods(backend))
+    app.register(Temperatures(backend))
+    app.register(Status(backend))
     yield app

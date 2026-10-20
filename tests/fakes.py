@@ -63,6 +63,6 @@ class _S:
 
 def _setup():
     f = {type(x).__name__: x for x in build_features(Fluent780ConnectorConfig())}  # dry run
-    lh, lc, backend = f["LiquidHandling"], f["LabwareController"], f["RunController"].backend
+    lh, lc, backend = f["LiquidHandling"], f["Labware"], f["RunControl"].backend
     lh.pc = FakePc()
     return lh, lc, backend

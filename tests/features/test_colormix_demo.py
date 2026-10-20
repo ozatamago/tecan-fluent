@@ -56,7 +56,7 @@ def test_the_command_in_a_dry_run(monkeypatch):
     from unitelabs.tecan_fluent.io.infinite.reader import FluentInfiniteReader
 
     f = {type(x).__name__: x for x in build_features(Fluent780ConnectorConfig())}  # dry run
-    demo, backend = f["ColorMixDemo"], f["RunController"].backend
+    demo, backend = f["ColorMix"], f["RunControl"].backend
 
     class Pc(FakePc):
         def index(self):

@@ -91,7 +91,7 @@ def _result(method: str, path: str, asc) -> MeasurementResult:
     return MeasurementResult(method=method, labels=asc.labels, values=values, result_file=path, metadata=asc.metadata)
 
 
-class TrayController(sila.Feature):
+class Tray(sila.Feature):
     """
     Open and close the plate tray of the Tecan Infinite 200 PRO. Make sure nothing is in the tray's way.
 
@@ -99,7 +99,13 @@ class TrayController(sila.Feature):
     """
 
     def __init__(self, reader: FluentInfiniteReader):
-        super().__init__(originator="jp.riken.bdr", category="platereader", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.infinite",
+            identifier="Tray",
+            name="Infinite - Tray",
+            version="1.0",
+        )
         self.reader = reader
 
     async def _tray(self, fn, status: sila.Status) -> None:
@@ -119,7 +125,7 @@ class TrayController(sila.Feature):
         await self._tray(self.reader.close_tray, status)
 
 
-class AbsorbanceReader(sila.Feature):
+class Absorbance(sila.Feature):
     """
     Measure the plate that is already in the Tecan Infinite 200 PRO.
 
@@ -131,7 +137,13 @@ class AbsorbanceReader(sila.Feature):
     """
 
     def __init__(self, reader: FluentInfiniteReader):
-        super().__init__(originator="jp.riken.bdr", category="platereader", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.infinite",
+            identifier="Absorbance",
+            name="Infinite - Absorbance",
+            version="1.0",
+        )
         self.reader = reader
 
     @sila.UnobservableProperty(errors=[ReaderOperationFailed])
@@ -179,7 +191,7 @@ class AbsorbanceReader(sila.Feature):
         return _result(f"{wavelength}nm", path, asc)
 
 
-class FluentPlateHandling(sila.Feature):
+class PlateHandling(sila.Feature):
     """
     Measure a plate from the Fluent worktable: the RGA brings it into the Infinite 200 PRO, it is measured, and the
     RGA puts it back - all within one FluentControl run (FluentControl forgets labware positions between runs).
@@ -189,10 +201,16 @@ class FluentPlateHandling(sila.Feature):
     """
 
     def __init__(self, reader: FluentInfiniteReader, tracker=None):
-        super().__init__(originator="jp.riken.bdr", category="platereader", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.infinite",
+            identifier="PlateHandling",
+            name="Infinite - Plate In / Out (RGA)",
+            version="1.0",
+        )
         self.reader = reader
         self.tracker = tracker
-        """The LabwareTracker shared with RgaController (if any), so a plate that has been moved away is not fetched
+        """The LabwareTracker shared with PlateTransfer (if any), so a plate that has been moved away is not fetched
         from its original position."""
 
     @sila.ObservableCommand(errors=[ReaderOperationFailed])
@@ -206,7 +224,7 @@ class FluentPlateHandling(sila.Feature):
           LabwareType: FluentControl labware type of the plate, e.g. "96 Well Flat_Custom".
           Location: Worktable location (carrier location name) where the plate is, e.g. "Nest7mm_Pos".
           Site: Site number at that location, e.g. 7.
-          Method: Magellan method file, e.g. "OFML_Abs405.mth". See AbsorbanceReader.Methods.
+          Method: Magellan method file, e.g. "OFML_Abs405.mth". See Absorbance.Methods.
 
         Returns:
           Result: The measured values and the result file.
@@ -228,7 +246,7 @@ class FluentPlateHandling(sila.Feature):
 
         Args:
           Labware: Labware name on the worktable, e.g. "96 Well Flat_Custom[001]".
-          Method: Magellan method file, e.g. "OFML_Abs405.mth". See AbsorbanceReader.Methods.
+          Method: Magellan method file, e.g. "OFML_Abs405.mth". See Absorbance.Methods.
 
         Returns:
           Result: The measured values and the result file.
@@ -237,7 +255,7 @@ class FluentPlateHandling(sila.Feature):
             if self.tracker is not None and labware in self.tracker.positions:
                 loc, site = self.tracker.where(labware)
                 raise BackendError(
-                    f"{labware} is currently at {loc}[{site}] (moved by RgaController). Use ReturnLabware first"
+                    f"{labware} is currently at {loc}[{site}] (moved by PlateTransfer). Use ReturnLabware first"
                 )
             await self.reader.check_method(method)
             name = self.reader._measure_name()

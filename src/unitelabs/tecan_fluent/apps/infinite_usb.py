@@ -2,8 +2,8 @@
 
     uv run connector start --app unitelabs.tecan_fluent.apps.infinite_usb:create_usb_app -cfg config.infinite_usb.json
 
-The features are the same as in the Fluent 780 Infinite server (TrayController / AbsorbanceReader).
-FluentPlateHandling (RGA transfers) is not included.
+The features are the same as in the Fluent 780 Infinite server (Tray / Absorbance).
+PlateHandling (RGA transfers) is not included.
 """
 
 import collections.abc
@@ -12,7 +12,7 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
-from ..features.infinite import AbsorbanceReader, TrayController
+from ..features.infinite import Absorbance, Tray
 from ..io.infinite.plr_reader import PyLabRobotInfiniteReader, UsbInfiniteConfig
 
 
@@ -38,7 +38,7 @@ async def create_usb_app(config: InfiniteUsbConnectorConfig) -> collections.abc.
 
     app = Connector(config)
     reader = PyLabRobotInfiniteReader(config.reader)
-    app.register(TrayController(reader))
-    app.register(AbsorbanceReader(reader))
+    app.register(Tray(reader))
+    app.register(Absorbance(reader))
     yield app
     await reader.stop()

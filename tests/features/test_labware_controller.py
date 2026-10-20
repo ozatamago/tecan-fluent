@@ -80,7 +80,7 @@ def test_add_labware_has_the_gui_fields():
 def _features():
     cfg = Fluent780ConnectorConfig()  # dry run
     f = {type(x).__name__: x for x in build_features(cfg)}
-    return f["LabwareController"], f["RunController"].backend
+    return f["Labware"], f["RunControl"].backend
 
 
 class _Status:
@@ -95,7 +95,7 @@ def test_needs_an_open_run_and_refuses_tracked_labware():
         with pytest.raises(LabwareCommandFailed, match="Start a run first"):
             await lc.transfer_labware("Template_Lid_6mm[001]", "HotelMP_Pos", 2, status=_Status())
         await backend.start_run()
-        with pytest.raises(LabwareCommandFailed, match="tracked by RgaController"):
+        with pytest.raises(LabwareCommandFailed, match="tracked by PlateTransfer"):
             await lc.transfer_labware("96 Well Flat_Custom[001]", "Regrip_Pos", 1, status=_Status())
         with pytest.raises(LabwareCommandFailed, match="Fingers must be one of"):
             await lc.get_fingers("Tube[001]", status=_Status())

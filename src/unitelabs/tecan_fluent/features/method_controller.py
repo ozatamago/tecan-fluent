@@ -55,7 +55,7 @@ class PreMethodRequired(Exception):
     """
 
 
-class MethodController(sila.Feature):
+class Methods(sila.Feature):
     """
     Temperature programs (PreMethods and Methods) stored on the Inheco ODTC 96, and running them.
 
@@ -68,7 +68,13 @@ class MethodController(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="odtc", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="inheco.odtc",
+            identifier="Methods",
+            name="ODTC - Temperature Programs",
+            version="1.0",
+        )
         self.backend = backend
         self._methods = load_methods()
         self._last_pre_method = ""

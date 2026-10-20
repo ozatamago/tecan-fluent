@@ -4,7 +4,7 @@ from ..io.fluent_backend import BackendError, FluentOdtcBackend
 from .door_controller import OdtcOperationFailed
 
 
-class StatusController(sila.Feature):
+class Status(sila.Feature):
     """
     Whether the connector can take a command now. Reading these properties never moves or heats anything.
 
@@ -14,7 +14,13 @@ class StatusController(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="odtc", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.fluent",
+            identifier="Status",
+            name="Fluent - Status",
+            version="1.0",
+        )
         self.backend = backend
 
     @sila.UnobservableProperty()

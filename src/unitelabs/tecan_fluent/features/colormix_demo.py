@@ -1,5 +1,5 @@
 """Hackathon demo: pipette coloured water into a plate, measure three absorbances and put the plate back, in one
-SiLA command (ColorMixDemo.MixColorsAndMeasure).
+SiLA command (ColorMix.MixColorsAndMeasure).
 
 It repeats the ColorMix runs of August 2026 (run_colormix_source_plate.py) in a short form:
 
@@ -9,7 +9,7 @@ It repeats the ColorMix runs of August 2026 (run_colormix_source_plate.py) in a 
   column with up to 8 channels at once (channel = row, so the tips line up with the wells), new 200 ul tips for
   every liquid. Nothing is mixed (as in August).
 - The plate goes to the Infinite 200 PRO through the regrip position, is measured with OFML_ColorMix3.mth (430,
-  520 and 630 nm) and goes back to its place (FluentPlateHandling.MeasureWorktablePlate's route).
+  520 and 630 nm) and goes back to its place (PlateHandling.MeasureWorktablePlate's route).
 
 Everything runs in one FluentControl run (opened here, with deck images at the start and end, unless a run is
 already open). The definitions every step uses are checked and recorded before anything moves, as for every
@@ -140,7 +140,7 @@ def summarize(planned: list[PlannedWell], asc, labels: list[str]) -> list[str]:
     return lines
 
 
-class ColorMixDemo(sila.Feature):
+class ColorMix(sila.Feature):
     """
     Hackathon demo of the Fluent 780: pipette water and red, yellow and blue dye into wells of a 96-well plate, read
     the plate at 430, 520 and 630 nm in the Infinite 200 PRO and put the plate back - all in one command.
@@ -150,7 +150,13 @@ class ColorMixDemo(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend, reader: FluentInfiniteReader, liquid: LiquidHandling):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="demo",
+            identifier="ColorMix",
+            name="Demo - Color Mix & Measure",
+            version="1.0",
+        )
         self.backend = backend
         self.reader = reader
         self.liquid = liquid
@@ -220,7 +226,7 @@ class ColorMixDemo(sila.Feature):
                 try:
                     await self.backend.end_run()
                 except BackendError:
-                    pass  # reported by RunController.RunOpen; the measurement itself is kept
+                    pass  # reported by RunControl.RunOpen; the measurement itself is kept
         result = _result(METHOD, path, asc)
         return summarize(planned, asc, result.labels), result, [label for label, _ in steps]
 

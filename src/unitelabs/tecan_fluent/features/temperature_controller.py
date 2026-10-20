@@ -35,7 +35,7 @@ class OdtcTemperatures(sila.CustomDataType):
     heatsink_tec: float
 
 
-class TemperatureController(sila.Feature):
+class Temperatures(sila.Feature):
     """
     Read the actual temperatures of the Inheco ODTC 96.
 
@@ -45,7 +45,13 @@ class TemperatureController(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="odtc", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="inheco.odtc",
+            identifier="Temperatures",
+            name="ODTC - Temperatures",
+            version="1.0",
+        )
         self.backend = backend
 
     @sila.ObservableCommand(errors=[OdtcOperationFailed])

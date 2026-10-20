@@ -11,7 +11,7 @@ class OdtcOperationFailed(Exception):
     """The ODTC operation could not be performed. The description explains why (FluentControl state, dialogs, ...)."""
 
 
-class DoorController(sila.Feature):
+class Door(sila.Feature):
     """
     Open and close the door (drawer) of the Inheco ODTC 96 thermal cycler.
 
@@ -21,7 +21,13 @@ class DoorController(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="odtc", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="inheco.odtc",
+            identifier="Door",
+            name="ODTC - Door",
+            version="1.0",
+        )
         self.backend = backend
 
     async def _run(self, macro: str, status: sila.Status) -> float:

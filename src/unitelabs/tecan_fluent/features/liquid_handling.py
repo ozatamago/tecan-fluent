@@ -5,8 +5,8 @@ GetTips, Aspirate, Dispense, Mix, DropTips and MoveArm each send one FluentContr
 (labware, wells, volumes, liquid class, channels, tip type). tests/io/test_gui_statements.py checks that these forms
 have the same structure as the statements of the 01-07 GUI scripts.
 
-They only work inside a run opened with RunController.StartRun, so that FluentControl keeps the mounted tips from one
-command to the next, and on labware added in that run with LabwareController.AddLabware or already registered on
+They only work inside a run opened with RunControl.StartRun, so that FluentControl keeps the mounted tips from one
+command to the next, and on labware added in that run with Labware.AddLabware or already registered on
 FluentControl's RuntimeWorkspace (so the type and its well layout are known). Refused before sending (lessons from the
 instrument):
 
@@ -236,7 +236,7 @@ def pipetting_xml(
 class LiquidHandling(sila.Feature):
     """
     Pipetting with the Air FCA (8 channels). Each command sends one FluentControl statement taken from the 01-07
-    scripts. Use them between RunController.StartRun and EndRun, on labware added with LabwareController.AddLabware
+    scripts. Use them between RunControl.StartRun and EndRun, on labware added with Labware.AddLabware
     or already on FluentControl's worktable. Channels are numbered 1-8; volumes are in ul. Before sending, the
     liquid class, tips and labware are checked against FluentControl's definitions and recorded.
 
@@ -257,7 +257,13 @@ class LiquidHandling(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.fluent.arm",
+            identifier="LiquidHandling",
+            name="FCA Arm - Liquid Handling",
+            version="1.0",
+        )
         self.backend = backend
         self.pc = None
         """Where definitions are read from; None means the Fluent PC of the backend (tests put a stand-in here)."""
@@ -292,7 +298,7 @@ class LiquidHandling(sila.Feature):
     def _need_run(self) -> None:
         if not self.backend.run_open:
             raise LiquidHandlingFailed(
-                "Start a run first (RunController.StartRun): FluentControl must keep the tips mounted between commands"
+                "Start a run first (RunControl.StartRun): FluentControl must keep the tips mounted between commands"
             )
 
     @staticmethod
@@ -317,7 +323,7 @@ class LiquidHandling(sila.Feature):
             return known[labware]["type"]
         raise LiquidHandlingFailed(
             f"{labware} is neither added in this run nor registered on FluentControl's "
-            "worktable; add it with LabwareController.AddLabware"
+            "worktable; add it with Labware.AddLabware"
         )
 
     async def _send(self, label: str, xml: str, status: sila.Status, extra: dict | None = None, post=None) -> None:

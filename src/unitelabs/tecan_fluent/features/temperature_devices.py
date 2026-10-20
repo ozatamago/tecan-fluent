@@ -136,7 +136,7 @@ async def _send(backend: FluentOdtcBackend, label: str, xml: str, status: sila.S
         raise TemperatureSettingFailed(str(exc)) from None
 
 
-class BioShakeController(sila.Feature):
+class BioShake(sila.Feature):
     """
     Temperature of the BioShake Q1 (shaker with heating and cooling) on the Fluent 780.
 
@@ -147,7 +147,13 @@ class BioShakeController(sila.Feature):
     LOW, HIGH = 4.0, 70.0
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="qinstruments.bioshake",
+            identifier="BioShake",
+            name="BioShake - Shake & Heat",
+            version="1.0",
+        )
         self.backend = backend
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
@@ -197,7 +203,7 @@ class BioShakeController(sila.Feature):
         await _send(self.backend, "BioShake: ShakeOff", bioshake_macro_xml("BioShake_ShakeOff"), status)
 
 
-class ShakingIncubatorController(sila.Feature):
+class ShakingIncubator(sila.Feature):
     """
     Temperature of the Inheco Incubator Shaker DWP on the Fluent 780.
 
@@ -207,7 +213,13 @@ class ShakingIncubatorController(sila.Feature):
     LOW, HIGH = 20.0, 60.0
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="inheco.incubator",
+            identifier="ShakingIncubator",
+            name="Inheco Incubator - Shake & Heat",
+            version="1.0",
+        )
         self.backend = backend
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
@@ -247,7 +259,7 @@ class ShakingIncubatorController(sila.Feature):
         )
 
 
-class TemperaturePositionController(sila.Feature):
+class CoolingHeatingPlates(sila.Feature):
     """
     Temperature of the three Inheco CPLC positions (inhecoMTC, slots 1 to 3) on the Fluent 780.
 
@@ -257,7 +269,13 @@ class TemperaturePositionController(sila.Feature):
     LOW, HIGH = 4.0, 70.0
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="inheco.cplc",
+            identifier="CoolingHeatingPlates",
+            name="Cooling / Heating Plates (CPLC 1-3)",
+            version="1.0",
+        )
         self.backend = backend
         self._last: dict[int, float] = {}
 
@@ -302,7 +320,7 @@ class TemperaturePositionController(sila.Feature):
         )
 
 
-class Incubator1Controller(sila.Feature):
+class Incubator1(sila.Feature):
     """
     Temperature of the shaking incubator "Incubator1" (6 Nest Incubator Shaking) on the Fluent 780.
 
@@ -312,7 +330,13 @@ class Incubator1Controller(sila.Feature):
     LOW, HIGH = 20.0, 50.0
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.incubator1",
+            identifier="Incubator1",
+            name="Incubator1 - Temperature, Shaker & Door",
+            version="1.0",
+        )
         self.backend = backend
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])

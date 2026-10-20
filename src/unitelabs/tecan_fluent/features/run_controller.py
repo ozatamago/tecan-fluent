@@ -7,7 +7,7 @@ class RunControlFailed(Exception):
     """The run could not be started or ended, or no definition change was waiting."""
 
 
-class RunController(sila.Feature):
+class RunControl(sila.Feature):
     """
     Hold one FluentControl run open across several commands, and handle the definition check.
 
@@ -23,7 +23,13 @@ class RunController(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.fluent",
+            identifier="RunControl",
+            name="Fluent - Run (Start / End)",
+            version="1.0",
+        )
         self.backend = backend
 
     @sila.ObservableCommand(errors=[RunControlFailed])

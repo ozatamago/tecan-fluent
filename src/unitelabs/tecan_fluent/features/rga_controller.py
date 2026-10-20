@@ -11,7 +11,7 @@ class PlateTransferFailed(Exception):
     """The labware could not be moved. The description explains why (not registered, FluentControl busy, ...)."""
 
 
-class RgaController(sila.Feature):
+class PlateTransfer(sila.Feature):
     """
     Move labware with the RGA (plate gripper) of the Fluent 780.
 
@@ -22,7 +22,13 @@ class RgaController(sila.Feature):
     """
 
     def __init__(self, backend: FluentOdtcBackend, tracker: LabwareTracker):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.fluent.gripper",
+            identifier="PlateTransfer",
+            name="RGA Gripper - Move & Return Plate",
+            version="1.0",
+        )
         self.backend = backend
         self.tracker = tracker
 

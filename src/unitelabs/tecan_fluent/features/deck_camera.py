@@ -18,7 +18,13 @@ class DeckCamera(sila.Feature):
     """
 
     def __init__(self, cameras: DeckCameras):
-        super().__init__(originator="jp.riken.bdr", category="fluent", version="1.0")
+        super().__init__(
+            originator="jp.riken.bdr",
+            category="tecan.fluent.camera",
+            identifier="DeckCamera",
+            name="Deck Cameras",
+            version="1.0",
+        )
         self.cameras = cameras
 
     @sila.UnobservableProperty()

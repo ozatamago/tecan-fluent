@@ -9,7 +9,7 @@ import dataclasses
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
 from .. import __version__
-from ..features.infinite import AbsorbanceReader, FluentPlateHandling, TrayController
+from ..features.infinite import Absorbance, PlateHandling, Tray
 from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
 
@@ -37,7 +37,7 @@ async def create_app(config: InfiniteConnectorConfig) -> collections.abc.AsyncGe
 
     app = Connector(config)
     reader = FluentInfiniteReader(FluentOdtcBackend(config.fluent), config.infinite)
-    app.register(TrayController(reader))
-    app.register(AbsorbanceReader(reader))
-    app.register(FluentPlateHandling(reader))
+    app.register(Tray(reader))
+    app.register(Absorbance(reader))
+    app.register(PlateHandling(reader))
     yield app
