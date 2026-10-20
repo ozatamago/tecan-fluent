@@ -21,7 +21,7 @@ class Incubator1(sila.Feature):
     def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
-            category="tecan.incubator1",
+            category="tecan.incubator",
             identifier="Incubator1",
             name="Incubator1 - Temperature, Shaker & Door",
             version="1.0",
