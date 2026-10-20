@@ -1,8 +1,10 @@
-"""A single SiLA 2 server, "Tecan Fluent 780", that combines the devices of the Fluent 780.
+"""A single SiLA 2 server, "Tecan Fluent 780 (All devices)", that combines every device of the Fluent 780.
 
     uv run connector start --app unitelabs.tecan_fluent:create_app -cfg config.fluent780.json
 
-Only one backend that sends commands to FluentControl (FluentOdtcBackend) is created and passed to every Feature.
+This is the server the Fluent PC runs (task OFML_Fluent780Server). The other modules in apps/ serve one device each.
+
+Only one backend that sends commands to FluentControl (FluentControlBackend) is created and passed to every Feature.
 The backend allows only one operation at a time, so ODTC and Infinite operations queue up automatically, and one
 server can no longer finish the channel of another server's run (2026-10-15, ODTC and Infinite servers merged).
 
@@ -16,7 +18,6 @@ import dataclasses
 
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig, sila
 
-from .. import __version__
 from ..features.bioshake.bioshake import BioShake
 from ..features.cplc.cooling_heating_plates import CoolingHeatingPlates
 from ..features.demo.colormix import ColorMix
@@ -34,32 +35,29 @@ from ..features.inheco_incubator.shaking_incubator import ShakingIncubator
 from ..features.odtc.door import Door
 from ..features.odtc.methods import Methods
 from ..features.odtc.temperatures import Temperatures
-from ..io.fluent.camera.deck_cameras import DeckCameraConfig, DeckCameras
-from ..io.fluent.gripper.labware_tracker import LabwareTracker, PlateTransferConfig
-from ..io.fluentcontrol.backend import FluentBackendConfig, FluentOdtcBackend
-from ..io.fluentcontrol.definitions import FluentPc
+from ..io.fluent.camera.deck_cameras import DeckCameraConfig
+from ..io.fluent.gripper.labware_tracker import PlateTransferConfig
+from ..io.fluentcontrol.backend import FluentBackendConfig, FluentControlBackend
 from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
+from .common import deck_cameras, labware_tracker, sila_server
+
+UUID = "7c3f1e9a-2b5d-4a8e-b6c4-0d1f2e3a4b50"
 
 
 @dataclasses.dataclass
-class Fluent780ConnectorConfig(ConnectorBaseConfig):
-    """Configuration for the combined Fluent 780 connector."""
+class Fluent780AllConnectorConfig(ConnectorBaseConfig):
+    """Configuration for the combined Fluent 780 connector (all devices)."""
 
     sila_server: SiLAServerConfig = dataclasses.field(
-        default_factory=lambda: SiLAServerConfig(
-            name="Tecan Fluent 780",
-            type="Workcell",
-            description=(
-                "Devices of the RIKEN BDR Tecan Fluent 780, driven through FluentControl: Inheco ODTC 96 (door, "
-                "methods, temperatures), Tecan Infinite 200 PRO (tray, absorbance, plate handling), the RGA plate "
-                "gripper (moving labware, lids, gripper fingers; FluentControl's own labware statements inside a "
-                "held-open run), BioShake, Inheco incubator, CPLC positions and Incubator1 (temperatures, shaking, "
-                "doors). Every command is checked against the FluentControl definitions it uses and recorded on the "
-                "Fluent PC before it is sent."
-            ),
-            version=__version__,
-            vendor_url="https://www.riken.jp/",
-            port=50060,
+        default_factory=lambda: sila_server(
+            "Tecan Fluent 780 (All devices)",
+            "Workcell",
+            "All devices of the RIKEN BDR Tecan Fluent 780 in one server, driven through FluentControl: the Fluent "
+            "(runs, FCA arm, RGA gripper, deck cameras), ODTC 96, Infinite 200 PRO, BioShake, Inheco incubator, CPLC "
+            "positions and Incubator1. Every command is checked against the FluentControl definitions it uses and "
+            "recorded on the Fluent PC before it is sent.",
+            UUID,
+            50060,
         )
     )
     fluent: FluentBackendConfig = dataclasses.field(default_factory=FluentBackendConfig)
@@ -68,19 +66,12 @@ class Fluent780ConnectorConfig(ConnectorBaseConfig):
     cameras: DeckCameraConfig = dataclasses.field(default_factory=DeckCameraConfig)
 
 
-def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
+def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
     """Build the Features of all devices, sharing one backend."""
-    backend = FluentOdtcBackend(config.fluent)
+    backend = FluentControlBackend(config.fluent)
     reader = FluentInfiniteReader(backend, config.infinite)
-    tracker = LabwareTracker(config.plates, FluentPc(config.fluent.definitions), persist=not config.fluent.dry_run)
-    cameras = DeckCameras(
-        config.cameras,
-        config.fluent.definitions.ssh_target,
-        config.fluent.definitions.remote_dir + "\\records",
-        config.fluent.dry_run,
-    )
-    backend.cameras = cameras
-    cameras.session_dir = lambda: backend.session_dir
+    tracker = labware_tracker(config.plates, config.fluent)
+    cameras = deck_cameras(config.cameras, backend)
     liquid = LiquidHandling(backend)
     return [
         # RGA
@@ -109,7 +100,7 @@ def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
     ]
 
 
-async def create_app(config: Fluent780ConnectorConfig) -> collections.abc.AsyncGenerator[Connector, None]:
+async def create_app(config: Fluent780AllConnectorConfig) -> collections.abc.AsyncGenerator[Connector, None]:
     """Create the connector application."""
 
     app = Connector(config)

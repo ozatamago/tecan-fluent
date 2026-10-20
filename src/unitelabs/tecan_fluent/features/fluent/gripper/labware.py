@@ -27,7 +27,7 @@ from ....io.fluent.gripper.statements import (
     to_base_xml,
     transfer_xml,
 )
-from ....io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ....io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ....io.fluentcontrol.progress import with_progress
 
 
@@ -45,7 +45,7 @@ class Labware(sila.Feature):
     TransferLabware, MoveLabwareToBase, PutLidOn, GetFingers and DropFingers MOVE the arm.
     """
 
-    def __init__(self, backend: FluentOdtcBackend, tracker: LabwareTracker | None = None):
+    def __init__(self, backend: FluentControlBackend, tracker: LabwareTracker | None = None):
         super().__init__(
             originator="jp.riken.bdr",
             category="tecan.fluent.gripper",

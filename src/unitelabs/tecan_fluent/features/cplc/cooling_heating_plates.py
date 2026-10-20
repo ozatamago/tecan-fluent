@@ -5,7 +5,7 @@ The macro and the meaning of its values: io/cplc/macros.py."""
 from unitelabs.cdk import sila
 
 from ...io.cplc.macros import mtc_set_temperature_xml
-from ...io.fluentcontrol.backend import FluentOdtcBackend
+from ...io.fluentcontrol.backend import FluentControlBackend
 from ..device_macro import TemperatureSettingFailed, check_range, send_macro
 
 
@@ -18,7 +18,7 @@ class CoolingHeatingPlates(sila.Feature):
 
     LOW, HIGH = 4.0, 70.0
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="inheco.cplc",

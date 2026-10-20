@@ -5,22 +5,22 @@ import os
 
 import pytest
 
-from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780ConnectorConfig, build_features
-from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780AllConnectorConfig, build_features
+from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentControlBackend
 
 
 def backends_of(feature):
     found = []
     for value in vars(feature).values():
-        if isinstance(value, FluentOdtcBackend):
+        if isinstance(value, FluentControlBackend):
             found.append(value)
-        elif hasattr(value, "backend") and isinstance(value.backend, FluentOdtcBackend):
+        elif hasattr(value, "backend") and isinstance(value.backend, FluentControlBackend):
             found.append(value.backend)
     return found
 
 
 def test_all_features_are_there_with_unique_names():
-    names = [type(f).__name__ for f in build_features(Fluent780ConnectorConfig())]
+    names = [type(f).__name__ for f in build_features(Fluent780AllConnectorConfig())]
     assert names == [
         "PlateTransfer",
         "Labware",
@@ -44,7 +44,7 @@ def test_all_features_are_there_with_unique_names():
 
 
 def test_one_backend_is_shared_by_every_feature():
-    features = build_features(Fluent780ConnectorConfig())
+    features = build_features(Fluent780AllConnectorConfig())
     backends = {id(b) for f in features for b in backends_of(f)}
     assert len(backends) == 1
     # every feature that talks to FluentControl shares it (DeckCamera reads the cameras directly)
@@ -52,7 +52,7 @@ def test_one_backend_is_shared_by_every_feature():
 
 
 def test_second_operation_is_refused_and_says_what_is_running():
-    backend = FluentOdtcBackend(Fluent780ConnectorConfig().fluent)  # dry_run by default
+    backend = FluentControlBackend(Fluent780AllConnectorConfig().fluent)  # dry_run by default
 
     async def scenario():
         backend.config.dry_run_seconds = 0.5
@@ -106,7 +106,7 @@ def test_features_can_be_turned_into_sila_definitions():
     # (2026-10-15: startup failed with from __future__ import annotations)
     from unitelabs.cdk import Connector
 
-    config = Fluent780ConnectorConfig()
+    config = Fluent780AllConnectorConfig()
     app = Connector(config)
     for feature in build_features(config):
         app.register(feature)

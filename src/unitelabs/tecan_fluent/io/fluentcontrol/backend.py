@@ -1,4 +1,6 @@
-"""Backend that runs ODTC operations through the UniteLabs FluentControl connector on the Fluent PC.
+"""Backend that runs FluentControl statements (ODTC, Infinite, RGA, FCA, device macros, ...) through the UniteLabs
+FluentControl connector on the Fluent PC. One backend allows one operation at a time; each server creates one and
+shares it among its features.
 
 Flow (one operation = one FluentControl run, unless a run was opened with StartRun)
 ----------------------------------------------------------------------------------
@@ -8,10 +10,11 @@ Flow (one operation = one FluentControl run, unless a run was opened with StartR
 2. (RunModeRunFinished counts as idle. FluentControl has already closed the method, so go straight on)
 3. PrepareMethod("OFML_ApiHost") -> RunMethod
 4. Wait for the execution channel to open (OFML_ApiHost is then accepting external commands)
-5. ExecuteCommand(XML of the ODTC macro)
+5. ExecuteCommand(XML of each statement, e.g. the ODTC macro)
 6. FinishCommand -> wait for the run to end (RunModeRunFinished)
 
-The XML sent is identical to what ran on the device in the 2026-10-09 qPCR water demo (odtc() in qpcr_water_demo.py).
+The ODTC macro XML (io/odtc/macros.py) is identical to what ran on the device in the 2026-10-09 qPCR water demo
+(odtc() in qpcr_water_demo.py).
 """
 
 from __future__ import annotations
@@ -92,7 +95,7 @@ class FluentBackendConfig(Config):
     """Checking and recording of the FluentControl definitions each operation uses."""
 
 
-class FluentOdtcBackend:
+class FluentControlBackend:
     def __init__(self, config: FluentBackendConfig):
         self.config = config
         self._lock = asyncio.Lock()

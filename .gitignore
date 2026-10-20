@@ -20,4 +20,7 @@ config.infinite_usb.json
 config.infinite_usb.dryrun.json
 config.fluent780.json
 config.fluent780.dryrun.json
+# per-app configs (copied from config/<app>.fluentpc.example.json)
+config/*.json
+!config/*.example.json
 .ruff_cache/

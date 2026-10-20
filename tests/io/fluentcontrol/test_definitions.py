@@ -7,7 +7,7 @@ import pathlib
 import pytest
 
 from fakes import FIXTURES as FIX
-from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentBackendConfig, FluentOdtcBackend
+from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentBackendConfig, FluentControlBackend
 from unitelabs.tecan_fluent.io.fluentcontrol.definitions import (
     DefinitionCheckFailed,
     DefinitionsConfig,
@@ -225,7 +225,7 @@ def test_labware_not_on_the_template_is_a_warning(preflight):
 
 
 def test_open_run_is_shared_and_recorded_in_one_folder(tmp_path):
-    backend = FluentOdtcBackend(FluentBackendConfig())  # dry run; the Fluent PC is offline -> names recorded only
+    backend = FluentControlBackend(FluentBackendConfig())  # dry run; the Fluent PC is offline -> names recorded only
 
     async def scenario():
         folder = pathlib.Path(await backend.start_run())
@@ -288,7 +288,7 @@ def test_a_hanging_fluent_pc_does_not_hold_up_the_command(pc, tmp_path):
 def test_open_run_takes_deck_images_at_start_and_end(tmp_path):
     import json as _json
 
-    backend = FluentOdtcBackend(FluentBackendConfig())
+    backend = FluentControlBackend(FluentBackendConfig())
 
     class FakeCameras:
         class config:

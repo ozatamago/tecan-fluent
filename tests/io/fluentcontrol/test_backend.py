@@ -2,7 +2,7 @@
 
 import pytest
 
-from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentBackendConfig, FluentOdtcBackend
+from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentBackendConfig, FluentControlBackend
 
 
 class _FakeClient:
@@ -24,7 +24,7 @@ class _FakeClient:
 
 
 def _open_run_with(state, dialogs):
-    backend = FluentOdtcBackend(FluentBackendConfig())
+    backend = FluentControlBackend(FluentBackendConfig())
     client = _FakeClient(state, dialogs)
     backend._client = client
     with pytest.raises(Exception) as caught:

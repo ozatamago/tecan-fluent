@@ -11,7 +11,7 @@ from ...io.bioshake.macros import (
     bioshake_shake_on_xml,
     bioshake_temp_off_xml,
 )
-from ...io.fluentcontrol.backend import FluentOdtcBackend
+from ...io.fluentcontrol.backend import FluentControlBackend
 from ..device_macro import TemperatureSettingFailed, check_range, send_macro
 
 
@@ -25,7 +25,7 @@ class BioShake(sila.Feature):
 
     LOW, HIGH = 4.0, 70.0
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="qinstruments.bioshake",

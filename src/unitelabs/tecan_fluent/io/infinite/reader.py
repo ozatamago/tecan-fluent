@@ -17,7 +17,7 @@ import time
 from unitelabs.cdk.config import Config
 
 from ..fluent.gripper.statements import add_labware_xml, remove_labware_xml, rga_xml
-from ..fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ..fluentcontrol.backend import BackendError, FluentControlBackend
 from .asc import AscResult, parse_asc
 from .xml import magellan_xml
 
@@ -48,7 +48,7 @@ class InfiniteConfig(Config):
 
 
 class FluentInfiniteReader:
-    def __init__(self, backend: FluentOdtcBackend, config: InfiniteConfig):
+    def __init__(self, backend: FluentControlBackend, config: InfiniteConfig):
         self.backend = backend
         self.config = config
 

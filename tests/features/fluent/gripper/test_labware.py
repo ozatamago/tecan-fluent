@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from fakes import FIXTURES as FIX
-from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780ConnectorConfig, build_features
+from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780AllConnectorConfig, build_features
 from unitelabs.tecan_fluent.features.fluent.gripper.labware import LabwareCommandFailed
 from unitelabs.tecan_fluent.io.fluent.gripper.statements import (
     add_labware_xml,
@@ -77,7 +77,7 @@ def test_add_labware_has_the_gui_fields():
 
 
 def _features():
-    cfg = Fluent780ConnectorConfig()  # dry run
+    cfg = Fluent780AllConnectorConfig()  # dry run
     f = {type(x).__name__: x for x in build_features(cfg)}
     return f["Labware"], f["RunControl"].backend
 

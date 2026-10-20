@@ -7,7 +7,7 @@ The allowed temperature ranges are limits this connector imposes for safety (not
 
 from unitelabs.cdk import sila
 
-from ..io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ..io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ..io.fluentcontrol.progress import with_progress
 
 
@@ -22,7 +22,7 @@ def check_range(temperature: float, low: float, high: float, device: str) -> Non
         )
 
 
-async def send_macro(backend: FluentOdtcBackend, label: str, xml: str, status: sila.Status) -> None:
+async def send_macro(backend: FluentControlBackend, label: str, xml: str, status: sila.Status) -> None:
     try:
         await with_progress(status, 1, lambda report: backend.run_steps([(label, xml)], report, label))
     except BackendError as exc:

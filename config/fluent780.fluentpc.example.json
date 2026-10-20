@@ -1,0 +1,48 @@
+{
+  "sila_server": {
+    "hostname": "10.5.1.156",
+    "port": 50062,
+    "tls": false,
+    "require_client_auth": false,
+    "root_certificates": null,
+    "certificate_chain": null,
+    "private_key": null,
+    "options": {},
+    "uuid": "17ad5c72-0927-4823-945c-8e8fe70e3f6a",
+    "name": "Tecan Fluent 780",
+    "type": "LiquidHandler",
+    "description": "The RIKEN BDR Tecan Fluent 780 itself, driven through FluentControl: runs shared by several commands, pipetting with the Air FCA arm, labware moves with the RGA gripper, and the deck cameras.",
+    "version": "0.1",
+    "vendor_url": "https://www.riken.jp/",
+    "default_lifetime": 3600.0
+  },
+  "cloud_servers": {
+    "enabled": true,
+    "endpoints": []
+  },
+  "discovery": {
+    "ip_version": "ipv4",
+    "network_interfaces": null,
+    "certificate": null
+  },
+  "logging": null,
+  "fluent": {
+    "host": "127.0.0.1",
+    "port": 51822,
+    "unitelabs_uuid": "6f944f98-9763-4b26-9467-681cf42c9e18",
+    "dry_run": false,
+    "dry_run_seconds": 0.0,
+    "ssh_target": "local",
+    "sensor_script": "C:\\Users\\Tecan\\OFML\\tools\\odtc_last_sensor_values.ps1",
+    "channel_timeout_s": 300.0,
+    "finish_timeout_s": 180.0,
+    "api_channel": "ofml",
+    "definitions": {
+      "ssh_target": "local",
+      "local_dir": "C:\\Users\\Tecan\\OFML\\state\\fluent780"
+    }
+  },
+  "cameras": {
+    "enabled": true
+  }
+}

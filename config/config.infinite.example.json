@@ -8,10 +8,10 @@
     "certificate_chain": null,
     "private_key": null,
     "options": {},
-    "uuid": "9b4d2c1e-6a7f-4e3b-a8d5-0c1e2f3a4b5c",
-    "name": "Tecan Infinite 200 PRO (Fluent 780)",
+    "uuid": "371acb9a-2c10-4e34-9b05-ee7061522fc9",
+    "name": "Tecan Infinite 200 PRO",
     "type": "PlateReader",
-    "description": "Control the Tecan Infinite 200 PRO plate reader integrated in the Tecan Fluent 780.",
+    "description": "The Tecan Infinite 200 PRO plate reader integrated in the RIKEN BDR Tecan Fluent 780, driven through FluentControl: tray, absorbance, and plates brought in and out by the RGA gripper.",
     "version": "0.1",
     "vendor_url": "https://www.riken.jp/",
     "default_lifetime": 3600.0

@@ -4,7 +4,7 @@ io/fluent/gripper/labware_tracker.py."""
 from unitelabs.cdk import sila
 
 from ....io.fluent.gripper.labware_tracker import LabwareTracker
-from ....io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ....io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ....io.fluentcontrol.progress import with_progress
 
 
@@ -22,7 +22,7 @@ class PlateTransfer(sila.Feature):
     If someone moves a plate by hand, tell the connector with RecordLabwarePosition before the next move.
     """
 
-    def __init__(self, backend: FluentOdtcBackend, tracker: LabwareTracker):
+    def __init__(self, backend: FluentControlBackend, tracker: LabwareTracker):
         super().__init__(
             originator="jp.riken.bdr",
             category="tecan.fluent.gripper",

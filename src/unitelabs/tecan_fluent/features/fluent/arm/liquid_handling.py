@@ -36,7 +36,7 @@ from ....io.fluent.arm.statements import (
     pipetting_xml,
     well_index,
 )
-from ....io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ....io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ....io.fluentcontrol.definitions import DefinitionCheckFailed, _unescape, liquid_class_settings, tip_values
 from ....io.fluentcontrol.progress import with_progress
 
@@ -158,7 +158,7 @@ class LiquidHandling(sila.Feature):
     Every command except SetLiquidDetectionErrorHandling and CheckInlineFilters MOVES the arm.
     """
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="tecan.fluent.arm",

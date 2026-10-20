@@ -12,14 +12,14 @@ import threading
 
 from unitelabs.cdk import sila
 
-from .backend import FluentOdtcBackend
+from .backend import FluentControlBackend
 
 STARTUP_S = 40.0
 """Approximate seconds for a FluentControl run to start (including initialisation). Measured 18-48 s on 2026-10-15."""
 
 
 async def run_with_progress(
-    backend: FluentOdtcBackend,
+    backend: FluentControlBackend,
     macro: str,
     settings: str | None,
     status: sila.Status,

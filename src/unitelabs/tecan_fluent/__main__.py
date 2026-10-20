@@ -1,4 +1,4 @@
-"""Start the combined "Tecan Fluent 780" server: python -m unitelabs.tecan_fluent [config path].
+"""Start the combined "Tecan Fluent 780 (All devices)" server: python -m unitelabs.tecan_fluent [config path].
 
 The config path defaults to config.fluent780.json in the current folder. `uv run connector start --app
 unitelabs.tecan_fluent:create_app -cfg <config path>` does the same and also sets up logging from the config.

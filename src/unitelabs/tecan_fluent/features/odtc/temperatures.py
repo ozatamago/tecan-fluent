@@ -2,7 +2,7 @@ import dataclasses
 
 from unitelabs.cdk import sila
 
-from ...io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
 from .errors import OdtcOperationFailed
 
 
@@ -44,7 +44,7 @@ class Temperatures(sila.Feature):
     15 seconds and cannot run while another ODTC operation (door, PreMethod, Method) is running.
     """
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="inheco.odtc",

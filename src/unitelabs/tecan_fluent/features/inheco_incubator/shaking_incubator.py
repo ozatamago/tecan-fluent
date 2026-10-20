@@ -4,7 +4,7 @@ The macros and the meaning of their values: io/inheco_incubator/macros.py."""
 
 from unitelabs.cdk import sila
 
-from ...io.fluentcontrol.backend import FluentOdtcBackend
+from ...io.fluentcontrol.backend import FluentControlBackend
 from ...io.inheco_incubator.macros import (
     inheco_incubator_macro_xml,
     inheco_incubator_set_temp_xml,
@@ -22,7 +22,7 @@ class ShakingIncubator(sila.Feature):
 
     LOW, HIGH = 20.0, 60.0
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="inheco.incubator",

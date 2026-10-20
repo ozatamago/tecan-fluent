@@ -1,6 +1,6 @@
 from unitelabs.cdk import sila
 
-from ...io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
 
 
 class RunControlFailed(Exception):
@@ -22,7 +22,7 @@ class RunControl(sila.Feature):
     AcceptDefinitionChanges and send the command again.
     """
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="tecan.fluent",

@@ -4,7 +4,7 @@ io/."""
 import hashlib
 import pathlib
 
-from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780ConnectorConfig, build_features
+from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780AllConnectorConfig, build_features
 
 FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
 
@@ -80,7 +80,7 @@ class _S:
 
 
 def _setup():
-    f = {type(x).__name__: x for x in build_features(Fluent780ConnectorConfig())}  # dry run
+    f = {type(x).__name__: x for x in build_features(Fluent780AllConnectorConfig())}  # dry run
     lh, lc, backend = f["LiquidHandling"], f["Labware"], f["RunControl"].backend
     lh.pc = FakePc()
     return lh, lc, backend

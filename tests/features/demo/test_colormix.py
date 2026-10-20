@@ -52,10 +52,10 @@ def test_summary_line_per_well():
 
 def test_the_command_in_a_dry_run(monkeypatch):
     from fakes import _S, FakePc
-    from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780ConnectorConfig, build_features
+    from unitelabs.tecan_fluent.apps.fluent780_all import Fluent780AllConnectorConfig, build_features
     from unitelabs.tecan_fluent.io.infinite.reader import FluentInfiniteReader
 
-    f = {type(x).__name__: x for x in build_features(Fluent780ConnectorConfig())}  # dry run
+    f = {type(x).__name__: x for x in build_features(Fluent780AllConnectorConfig())}  # dry run
     demo, backend = f["ColorMix"], f["RunControl"].backend
 
     class Pc(FakePc):

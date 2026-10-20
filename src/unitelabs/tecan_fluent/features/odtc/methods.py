@@ -3,7 +3,7 @@ import datetime
 
 from unitelabs.cdk import sila
 
-from ...io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ...io.fluentcontrol.progress import run_with_progress
 from ...io.odtc.method_store import SNAPSHOT_TAKEN, load_methods, premethods_for
 from .errors import OdtcOperationFailed
@@ -67,7 +67,7 @@ class Methods(sila.Feature):
     restarts, and it does not know about runs started from the FluentControl GUI.
     """
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="inheco.odtc",

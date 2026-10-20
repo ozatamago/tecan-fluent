@@ -4,7 +4,7 @@ The macros and the meaning of their values: io/incubator1/macros.py."""
 
 from unitelabs.cdk import sila
 
-from ...io.fluentcontrol.backend import FluentOdtcBackend
+from ...io.fluentcontrol.backend import FluentControlBackend
 from ...io.incubator1.macros import incubator1_macro_xml, incubator1_set_temperature_xml, incubator1_start_shaker_xml
 from ..device_macro import TemperatureSettingFailed, check_range, send_macro
 
@@ -18,7 +18,7 @@ class Incubator1(sila.Feature):
 
     LOW, HIGH = 20.0, 50.0
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="tecan.incubator1",

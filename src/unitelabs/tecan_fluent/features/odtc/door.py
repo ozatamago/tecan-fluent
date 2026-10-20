@@ -1,6 +1,6 @@
 from unitelabs.cdk import sila
 
-from ...io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ...io.fluentcontrol.progress import run_with_progress
 from .errors import OdtcOperationFailed
 
@@ -17,7 +17,7 @@ class Door(sila.Feature):
     is started while FluentControl is busy with another run or waiting on a dialog.
     """
 
-    def __init__(self, backend: FluentOdtcBackend):
+    def __init__(self, backend: FluentControlBackend):
         super().__init__(
             originator="jp.riken.bdr",
             category="inheco.odtc",

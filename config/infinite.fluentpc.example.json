@@ -1,0 +1,54 @@
+{
+  "sila_server": {
+    "hostname": "10.5.1.156",
+    "port": 50063,
+    "tls": false,
+    "require_client_auth": false,
+    "root_certificates": null,
+    "certificate_chain": null,
+    "private_key": null,
+    "options": {},
+    "uuid": "371acb9a-2c10-4e34-9b05-ee7061522fc9",
+    "name": "Tecan Infinite 200 PRO",
+    "type": "PlateReader",
+    "description": "The Tecan Infinite 200 PRO plate reader integrated in the RIKEN BDR Tecan Fluent 780, driven through FluentControl: tray, absorbance, and plates brought in and out by the RGA gripper.",
+    "version": "0.1",
+    "vendor_url": "https://www.riken.jp/",
+    "default_lifetime": 3600.0
+  },
+  "cloud_servers": {
+    "enabled": true,
+    "endpoints": []
+  },
+  "discovery": {
+    "ip_version": "ipv4",
+    "network_interfaces": null,
+    "certificate": null
+  },
+  "logging": null,
+  "fluent": {
+    "host": "127.0.0.1",
+    "port": 51822,
+    "unitelabs_uuid": "6f944f98-9763-4b26-9467-681cf42c9e18",
+    "dry_run": false,
+    "dry_run_seconds": 0.0,
+    "ssh_target": "local",
+    "sensor_script": "C:\\Users\\Tecan\\OFML\\tools\\odtc_last_sensor_values.ps1",
+    "channel_timeout_s": 300.0,
+    "finish_timeout_s": 180.0,
+    "api_channel": "ofml",
+    "definitions": {
+      "ssh_target": "local",
+      "local_dir": "C:\\Users\\Tecan\\OFML\\state\\infinite"
+    }
+  },
+  "infinite": {
+    "reader_location": "InfiniteM200_New",
+    "reader_site": 1,
+    "regrip_location": "Regrip_Pos",
+    "regrip_site": 1,
+    "output_dir": "C:\\Users\\Public\\Documents\\Tecan\\Magellan Pro\\asc",
+    "method_dir": "C:\\Users\\Public\\Documents\\Tecan\\Magellan Pro\\mth",
+    "wavelength_methods": {}
+  }
+}

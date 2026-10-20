@@ -21,7 +21,7 @@ import dataclasses
 from unitelabs.cdk import sila
 
 from ...io.fluent.arm.statements import drop_tips_xml, get_tips_xml, pipetting_xml, well_index
-from ...io.fluentcontrol.backend import BackendError, FluentOdtcBackend
+from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ...io.fluentcontrol.progress import with_progress
 from ...io.infinite.reader import FluentInfiniteReader
 from ..fluent.arm.liquid_handling import LiquidHandling, LiquidHandlingFailed
@@ -144,7 +144,7 @@ class ColorMix(sila.Feature):
     four for a test - and an empty 96 Well Flat_Custom[001] at Nest7mm_Pos[6]. The arm and the plate gripper MOVE.
     """
 
-    def __init__(self, backend: FluentOdtcBackend, reader: FluentInfiniteReader, liquid: LiquidHandling):
+    def __init__(self, backend: FluentControlBackend, reader: FluentInfiniteReader, liquid: LiquidHandling):
         super().__init__(
             originator="jp.riken.bdr",
             category="demo",
