@@ -12,7 +12,7 @@
 # config.fluent780.json, exactly as before. Task names of the other apps: fluent780 -> OFML_Fluent780OnlyServer (task
 # names ignore case, so "Fluent780" is taken by the combined server), odtc -> OFML_OdtcServer, infinite ->
 # OFML_InfiniteServer, bioshake -> OFML_BioShakeServer, inheco_incubator -> OFML_InhecoIncubatorServer, cplc ->
-# OFML_CplcServer, incubator1 -> OFML_Incubator1Server, colormix_demo -> OFML_ColorMixDemoServer.
+# OFML_CplcServer, incubator1 -> OFML_Incubator1Server, colormix_demo -> OFML_ColorMixServer.
 #
 # A process started from an SSH session ends with that session (2026-10-16), so the server is started this way.
 # The ports (50060 and up) are not opened in the firewall: other computers reach them through an SSH tunnel.
@@ -24,7 +24,7 @@ param(
 )
 $names = @{
   fluent780_all = 'Fluent780'; fluent780 = 'Fluent780Only'; odtc = 'Odtc'; infinite = 'Infinite'; bioshake = 'BioShake'
-  inheco_incubator = 'InhecoIncubator'; cplc = 'Cplc'; incubator1 = 'Incubator1'; colormix_demo = 'ColorMixDemo'
+  inheco_incubator = 'InhecoIncubator'; cplc = 'Cplc'; incubator1 = 'Incubator1'; colormix_demo = 'ColorMix'
 }
 if (-not $TaskName) {
   $part = $names[$App]

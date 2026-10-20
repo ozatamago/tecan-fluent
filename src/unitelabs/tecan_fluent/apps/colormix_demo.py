@@ -23,7 +23,7 @@ UUID = "737d7686-f67a-4450-815a-6173e0b13ff9"
 
 
 @dataclasses.dataclass
-class ColorMixDemoConnectorConfig(ConnectorBaseConfig):
+class ColorMixConnectorConfig(ConnectorBaseConfig):
     """Configuration for the ColorMix demo connector."""
 
     sila_server: SiLAServerConfig = dataclasses.field(
@@ -41,7 +41,7 @@ class ColorMixDemoConnectorConfig(ConnectorBaseConfig):
     cameras: DeckCameraConfig = dataclasses.field(default_factory=DeckCameraConfig)
 
 
-def build_features(config: ColorMixDemoConnectorConfig) -> list[sila.Feature]:
+def build_features(config: ColorMixConnectorConfig) -> list[sila.Feature]:
     """Build the demo and the Features it uses, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
     reader = FluentInfiniteReader(backend, config.infinite)
@@ -57,7 +57,7 @@ def build_features(config: ColorMixDemoConnectorConfig) -> list[sila.Feature]:
     ]
 
 
-async def create_app(config: ColorMixDemoConnectorConfig) -> collections.abc.AsyncGenerator[Connector, None]:
+async def create_app(config: ColorMixConnectorConfig) -> collections.abc.AsyncGenerator[Connector, None]:
     """Create the connector application."""
 
     app = Connector(config)
