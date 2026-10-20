@@ -8,11 +8,11 @@ import dataclasses
 
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
+from .. import __version__
 from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 from ..features.infinite import AbsorbanceReader, FluentPlateHandling, TrayController
 from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
 
-__version__ = "0.1.0"
 
 
 @dataclasses.dataclass

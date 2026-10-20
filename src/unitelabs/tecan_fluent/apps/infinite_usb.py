@@ -11,10 +11,10 @@ import dataclasses
 
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
+from .. import __version__
 from ..features.infinite import AbsorbanceReader, TrayController
 from ..io.infinite.plr_reader import PyLabRobotInfiniteReader, UsbInfiniteConfig
 
-__version__ = "0.1.0"
 
 
 @dataclasses.dataclass

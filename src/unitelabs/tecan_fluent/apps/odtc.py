@@ -8,13 +8,13 @@ import dataclasses
 
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig
 
+from .. import __version__
 from ..features.door_controller import DoorController
 from ..io.fluent_backend import FluentBackendConfig, FluentOdtcBackend
 from ..features.method_controller import MethodController
 from ..features.status_controller import StatusController
 from ..features.temperature_controller import TemperatureController
 
-__version__ = "0.1.0"
 
 
 @dataclasses.dataclass

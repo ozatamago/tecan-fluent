@@ -10,7 +10,9 @@ this package runs this file first, so the combined server's config class is impo
 (otherwise it would coexist with the config class of the other app being started).
 """
 
-__version__ = "0.1.0"
+import importlib.metadata
+
+__version__ = importlib.metadata.version("unitelabs-tecan-fluent")
 
 
 def __getattr__(name):

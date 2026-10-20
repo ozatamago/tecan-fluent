@@ -16,6 +16,7 @@ import dataclasses
 
 from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig, sila
 
+from .. import __version__
 from ..features.colormix_demo import ColorMixDemo
 from ..features.door_controller import DoorController
 from ..features.deck_camera import DeckCamera
@@ -39,7 +40,6 @@ from ..features.temperature_devices import (
     TemperaturePositionController,
 )
 
-__version__ = "0.1.0"
 
 
 @dataclasses.dataclass
