@@ -18,6 +18,9 @@ dependencies = [
 requires = ["uv_build>=0.11.14,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv.build-backend]
+module-name = "unitelabs.tecan_fluent"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",

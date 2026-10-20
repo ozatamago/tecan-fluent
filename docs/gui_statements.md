@@ -1,6 +1,6 @@
 # FluentControl statements used by the 01-07 GUI scripts (stage 4 reference)
 
-Extracted with `tools/extract_gui_statements.py` into `tests/fixtures/gui_statements/` (72 distinct statements;
+Extracted with `scripts/extract_gui_statements.py` into `tests/fixtures/gui_statements/` (72 distinct statements;
 `index.tsv` gives the script, line and main arguments of each). Device macros are in `tests/fixtures/gui_macros/`.
 
 `tests/fixtures/liha_verified/` holds the pipetting XML that ran on the instrument in August 2026 (water, 1 and 8
