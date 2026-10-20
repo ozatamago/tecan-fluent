@@ -1417,6 +1417,11 @@ test = [
     { name = "pytest" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "unitelabs-tecan-fluent", extra = ["test"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "commitizen", marker = "extra == 'dev'" },
@@ -1429,6 +1434,9 @@ requires-dist = [
     { name = "unitelabs-cdk", specifier = "~=0.13.6" },
 ]
 provides-extras = ["test", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "unitelabs-tecan-fluent", extras = ["test"] }]
 
 [[package]]
 name = "virtualenv"

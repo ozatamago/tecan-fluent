@@ -36,6 +36,10 @@ dev = [
     "commitizen",
 ]
 
+[dependency-groups]
+# installed by a plain "uv sync" / "uv run" (as pytest was before), so "uv run pytest" works without --all-extras
+dev = ["unitelabs-tecan-fluent[test]"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

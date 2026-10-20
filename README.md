@@ -125,7 +125,8 @@ cd riken-odtc-connector
 uv sync
 ```
 
-`uv sync --all-extras` also installs the test and development tools (pytest, ruff, pre-commit, commitizen).
+`uv sync` also installs pytest (the `test` extra, through the default `dev` group); `uv sync --all-extras` adds
+the development tools (ruff, pre-commit, commitizen).
 
 ### Configuration
 
@@ -162,7 +163,7 @@ The combined server can also be started with `uv run python -m unitelabs.tecan_f
 ## Testing
 
 ```bash
-uv run --all-extras pytest
+uv run pytest
 ```
 
 The tests connect to neither the devices nor the Fluent PC (`tests/conftest.py` replaces every SSH, file and camera
