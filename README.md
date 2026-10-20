@@ -120,8 +120,8 @@ only when `create_app` is asked for).
 ### Installation
 
 ```bash
-git clone https://github.com/ozatamago/riken-odtc-connector.git
-cd riken-odtc-connector
+git clone https://github.com/ozatamago/tecan-fluent.git
+cd tecan-fluent
 uv sync
 ```
 
@@ -190,7 +190,7 @@ The server runs on the Fluent PC (Windows) as the scheduled task `OFML_Fluent780
 directly.
 
 ```powershell
-git clone https://github.com/ozatamago/riken-odtc-connector.git C:\Users\Tecan\OFML\connector
+git clone https://github.com/ozatamago/tecan-fluent.git C:\Users\Tecan\OFML\connector
 cd C:\Users\Tecan\OFML\connector
 uv sync
 copy config\config.fluent780.fluentpc.example.json config.fluent780.json   # hostname 10.5.1.156, ssh_target "local"
@@ -399,4 +399,4 @@ uv run pre-commit install
 
 ## Contact
 
-If you found a bug, please use the [issue tracker](https://github.com/ozatamago/riken-odtc-connector/issues).
+If you found a bug, please use the [issue tracker](https://github.com/ozatamago/tecan-fluent/issues).

@@ -52,4 +52,6 @@ class StatusController(sila.Feature):
             state, dialogs = await self.backend.fluent_status()
         except BackendError as exc:
             raise OdtcOperationFailed(str(exc)) from None
-        return state in {"EditMode", "RunModeRunFinished"} and not dialogs
+        # an empty "Unused ID" dialog stays after FluentControl restarts and does not block a run
+        blocking = [d for d in dialogs if d.split(":", 1)[-1].strip()]
+        return state in {"EditMode", "RunModeRunFinished"} and not blocking

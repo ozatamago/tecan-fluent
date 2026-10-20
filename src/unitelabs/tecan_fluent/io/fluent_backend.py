@@ -274,6 +274,13 @@ class FluentOdtcBackend:
                 f"Not starting because FluentControl is in {state} (check for other runs or dialogs)"
                 + (f". Open dialogs: {' / '.join(dialogs)}" if dialogs else "")
             )
+        # A run stopped at a dialog (e.g. a door opened) can leave FluentControl in RunModeRunFinished with the dialog
+        # still open. PrepareMethod is then refused ("Only allowed in Edit Mode!") and the UniteLabs connector does not
+        # answer for 2 minutes (2026-10-20). An empty "Unused ID" dialog stays after FluentControl restarts and does
+        # not block a run.
+        dialogs = [d for d in self._active_dialogs() if d.split(":", 1)[-1].strip()]
+        if dialogs:
+            raise BackendError(f"Not starting because FluentControl has open dialogs: {' / '.join(dialogs)}")
 
         report("PrepareMethod")
         c.RuntimeController.PrepareMethod(API_HOST_METHOD)

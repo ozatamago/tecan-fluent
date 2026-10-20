@@ -23,8 +23,8 @@ dependencies = [
 ]
 
 [project.urls]
-repository = "https://github.com/ozatamago/riken-odtc-connector"
-"Bug Tracker" = "https://github.com/ozatamago/riken-odtc-connector/issues"
+repository = "https://github.com/ozatamago/tecan-fluent"
+"Bug Tracker" = "https://github.com/ozatamago/tecan-fluent/issues"
 
 [project.optional-dependencies]
 test = [

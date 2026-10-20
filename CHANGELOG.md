@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Refuse a command before PrepareMethod while FluentControl shows a dialog (e.g. "a door was opened" after a
+  stopped run): FluentControl stays in RunModeRunFinished then, refuses PrepareMethod, and the UniteLabs connector did
+  not answer for 2 minutes. `StatusController.Ready` ignores the empty "Unused ID" dialog left after a restart.
+
 ### Changed
 
 - Restructured the repository into the UniteLabs connector layout: the package `riken_odtc_connector` is now the
