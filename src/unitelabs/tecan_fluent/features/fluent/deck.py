@@ -25,7 +25,7 @@ class Deck(sila.Feature):
     nor in the deck state are refused before anything is sent.
 
     Record changes while hands-off is held (Fluent - Hands Off) and no run is open: an open run already has its
-    layout. Every change increases the version and is recorded on the Fluent PC (OFML\\records\\deck).
+    layout. Every change increases the version and is recorded on the Fluent PC (folder deck of the OFML records).
     """
 
     def __init__(self, backend: FluentControlBackend, deck: DeckState | None):
