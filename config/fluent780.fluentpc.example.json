@@ -45,5 +45,11 @@
   },
   "cameras": {
     "enabled": true
+  },
+  "deck": {
+    "state_file": "C:\\Users\\Tecan\\OFML\\state\\deck.json",
+    "base_worktable": "",
+    "handoff_sites": [],
+    "hands_off_max_minutes": 30.0
   }
 }

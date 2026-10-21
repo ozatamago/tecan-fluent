@@ -68,6 +68,18 @@ def test_servers_on_the_fluent_pc_never_share_local_files():
     assert len(set(dirs)) == len(dirs)
 
 
+def test_servers_with_the_deck_feature_share_one_deck_state_on_the_fluent_pc():
+    from unitelabs.tecan_fluent.io.fluent.deck.state import DECK_FILE
+
+    for app in ("fluent780_all", "fluent780"):
+        config = config_class(app).validate(
+            json.loads((CONFIG / f"{app}.fluentpc.example.json").read_text(encoding="utf-8"))
+        )
+        assert config.deck.state_file == DECK_FILE and config.deck.hands_off_max_minutes == 30
+    # without the setting (e.g. a configuration copied before the deck state existed) there is no deck state
+    assert config_class("fluent780_all")().deck.state_file == ""
+
+
 def test_uuids_and_ports_are_unique_and_fixed():
     servers = {app: config_class(app)().sila_server for app in EXAMPLES}
     assert len({s.uuid for s in servers.values()}) == len(servers)
