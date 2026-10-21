@@ -32,7 +32,9 @@ FluentControl (method OFML_ApiHost) → device drivers (SiLA-ODTC, Magellan, RGA
 Each operation starts one FluentControl run (`OFML_ApiHost`), sends its statements or device macros, and ends the run
 (unless a run was opened with `RunControl.StartRun`, which later commands then share). Before anything is sent,
 every FluentControl definition the XML uses (liquid classes, tips, labware, locations, the worktable, device macros) is
-checked and recorded on the Fluent PC under `C:\Users\Tecan\OFML` (`io/fluentcontrol/definitions.py`).
+checked and recorded on the Fluent PC under `C:\Users\Tecan\OFML` (`io/fluentcontrol/definitions.py`). With a deck
+state (`deck.state_file`), every run first brings FluentControl's record of the labware in line with the real deck
+(see [Deck state and hands-off](#deck-state-and-hands-off-combined-server-and-fluent-server)).
 
 Things that FluentControl does not return through its API are read on the Fluent PC (over SSH, or directly when the
 connector runs there): the ODTC temperatures from the driver log, Magellan's ASC result files, FluentControl's own log
@@ -51,7 +53,7 @@ name starts with the device, so the UniteLabs App shows the device first.
 | Device | Server (`apps/<app>.py`) | Port | Features (display name) |
 |---|---|---|---|
 | All devices | "Tecan Fluent 780 (All devices)" (`fluent780_all`; also `unitelabs.tecan_fluent:create_app`) | 50060 | all of the features below |
-| Fluent 780 | "Tecan Fluent 780" (`fluent780`) | 50062 | `RunControl` (Fluent - Run (Start / End)), `Status` (Fluent - Status), `LiquidHandling` (FCA Arm - Liquid Handling), `PlateTransfer` (RGA Gripper - Move & Return Plate), `Labware` (RGA Gripper - Labware, Lids & Fingers), `DeckCamera` (Deck Cameras) |
+| Fluent 780 | "Tecan Fluent 780" (`fluent780`) | 50062 | `RunControl` (Fluent - Run (Start / End)), `Status` (Fluent - Status), `LiquidHandling` (FCA Arm - Liquid Handling), `PlateTransfer` (RGA Gripper - Move & Return Plate), `Labware` (RGA Gripper - Labware, Lids & Fingers), `DeckCamera` (Deck Cameras), `Deck` (Fluent - Deck), `HandsOff` (Fluent - Hands Off) |
 | Inheco ODTC 96 | "Inheco ODTC (Fluent 780)" (`odtc`; the stand-alone server is the inheco-odtc repository) | 50061 | `Door` (ODTC - Door), `Methods` (ODTC - Temperature Programs), `Temperatures` (ODTC - Temperatures), `Status` |
 | Tecan Infinite 200 PRO | "Tecan Infinite 200 PRO" (`infinite`) | 50063 | `Tray` (Infinite - Tray), `Absorbance` (Infinite - Absorbance), `PlateHandling` (Infinite - Plate In / Out (RGA)), `Status` |
 | BioShake Q1 | "BioShake" (`bioshake`) | 50064 | `BioShake` (BioShake - Shake & Heat), `Status` |
@@ -70,7 +72,8 @@ time" for itself; across servers, the file set in `fluent.shared_lock` (`C:\User
 in every Fluent PC example config, and in the stand-alone ODTC server) is held while a server sends to FluentControl
 and for as long as it keeps a run open (StartRun to EndRun). A command on another server is refused meanwhile with
 the name of the server and operation that hold it, and `Fluent - Status` shows it (`Ready` false, `CurrentOperation`
-"another server: ..."). The operating system releases the lock when a server process ends.
+"another server: ..."). The operating system releases the lock when a server process ends. `HandsOff.Begin` holds the
+same lock on behalf of another robot working on the deck, so every server refuses with "hands-off by ...".
 
 ### Package layout
 
@@ -82,7 +85,7 @@ src/unitelabs/tecan_fluent/
                 fluent780_all.py fluent780.py odtc.py infinite.py infinite_usb.py bioshake.py inheco_incubator.py
                 cplc.py incubator1.py colormix_demo.py, and common.py (shared parts, no config class)
   features/     the SiLA Features (one per module) and their errors, one folder per device:
-    fluent/           run_control.py status.py
+    fluent/           run_control.py status.py deck.py hands_off.py
       arm/            liquid_handling.py
       gripper/        plate_transfer.py labware.py
       camera/         deck_camera.py
@@ -96,8 +99,10 @@ src/unitelabs/tecan_fluent/
     device_macro.py   shared by the four devices driven by one legacy driver macro per command
   io/           everything that talks to FluentControl, the Fluent PC or a device, one folder per device:
     fluentcontrol/    backend.py definitions.py remote.py fc_log.py progress.py errors.py statements.py
+                      shared_lock.py hands_off.py
     fluent/arm/       statements.py (GetTips ... DropTips) smart_xml.py (Smart Commands, worklists)
     fluent/gripper/   statements.py (RGA, AddLabware, fingers) labware_tracker.py
+    fluent/deck/      state.py (the deck state and its registration at the start of a run)
     fluent/camera/    deck_cameras.py
     odtc/             macros.py method_store.py
     infinite/         asc.py reader.py xml.py plr_reader.py
@@ -174,6 +179,12 @@ cp config/bioshake.fluentpc.example.json config/bioshake.json       # a device s
 - On the Fluent PC, every server has its own `fluent.definitions.local_dir` (`C:\Users\Tecan\OFML\state\<app>`;
   the combined server keeps `C:\Users\Tecan\OFML\connector_state`), so servers never share pending record files.
   The records themselves all go to `C:\Users\Tecan\OFML\records`.
+- `deck` (combined server and Fluent server): `state_file` (the deck state; `C:\Users\Tecan\OFML\state\deck.json` in
+  both Fluent PC examples, so they share it; empty or missing: no deck state, as before), `base_worktable` (the
+  worktable the deck state describes; must be `fluent.definitions.workspace`, empty means that one), `handoff_sites`
+  (positions other robots may use, e.g. `[{"location": "Nest7mm_Pos", "site": 1}]`; kept for the hand-over commands
+  to come) and `hands_off_max_minutes` (default and upper limit of `HandsOff.Begin`'s `MaxMinutes`, 30). Nothing
+  instrument-specific is built in: the same settings serve a Fluent 480 with its own names.
 
 ### Starting
 
@@ -242,7 +253,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\start_connec
 - Only one server with the same UUID may run: stop it on the other computer first.
 - Records that cannot be stored at once wait in `fluent.definitions.local_dir` (`C:\Users\Tecan\OFML\connector_state`).
 - The labware positions the RGA commands remember are kept on the Fluent PC
-  (`C:\Users\Tecan\OFML\state\labware_positions.json`, setting `plates.positions_file`).
+  (`C:\Users\Tecan\OFML\state\labware_positions.json`, setting `plates.positions_file`). With a deck state
+  (`deck.state_file`) they are kept there instead; it takes over `labware_positions.json` once, on first use.
 
 ### Scheduled task
 
@@ -303,11 +315,58 @@ Use the server from the UniteLabs App or any SiLA 2 client.
 - FluentControl resets labware to its initial position at the start of every run, so the connector remembers the
   current position (on the Fluent PC, `C:\Users\Tecan\OFML\state\labware_positions.json`) and, at the start of the next
   run, syncs FluentControl with `RemoveLabware` → `AddLabware` before moving. If the Fluent PC cannot be reached, moves
-  are refused; in a dry run, moves are remembered in memory only.
+  are refused; in a dry run, moves are remembered in memory only. With a deck state (`deck.state_file`), the positions
+  are kept in it instead, and the start of every run registers them, so a move needs no `RemoveLabware` →
+  `AddLabware` of its own.
 - Only labware listed in the `plates.labware` setting (name, type, home position) may be moved (default
   `96 Well Flat_Custom[001]`, home position `Nest7mm_Pos[6]`).
 - **Verified on the instrument from the UniteLabs App on 2026-10-15**: `Nest7mm_Pos[6]` → `Regrip_Pos[1]` → back to
   `Nest7mm_Pos[6]` in a separate run.
+
+### Deck state and hands-off (combined server and Fluent server)
+
+For a deck that other robots (a mobile robot, an arm) or people also change. Nothing in these features moves the
+instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `io/fluent/deck/state.py` and
+`io/fluentcontrol/hands_off.py`.
+
+| Feature | Command / Property | Description |
+|---|---|---|
+| `Deck` | `Layout` (P) | The base worktable and the version, then one line per labware that differs from it ("label: type at location[site] (lid ..., placed by ..., base ...)") |
+| | `PlaceLabware(Label, LabwareType, Location, Site, Lid, PlacedBy)` | Record that a labware was put on the deck. Refused if the site is taken, the type is not defined in FluentControl, or the location/site is not on the base worktable |
+| | `RemoveLabware(Label, RemovedBy)` | Record that a labware was taken off the deck |
+| | `MoveLabwareRecord(Label, Location, Site, MovedBy)` | Record a move by something other than the RGA |
+| | `SetContents(Label, Wells, Liquid, Volumes)` | Record what is in the wells (for planning and checks later; also allowed during a run) |
+| | `PlaceTipRack(Label, TipType, Location, Site, Kind, PlacedBy)` | `PlaceLabware` for a tip rack, with `Kind` "full" or "as is"; a rack already at that position counts as refilled in place |
+| | `TipRacks` (P) | The racks recorded with `PlaceTipRack`: tip type, position, recorded state |
+| `HandsOff` | `Begin(Who, Reason, MaxMinutes)` | Hold the shared FluentControl lock for another robot; returns a token. Refused while a run is open or a command is sent. `MaxMinutes` 0 = `deck.hands_off_max_minutes` (30), also the maximum |
+| | `End(Token)` | Release it |
+| | `State` (P) | Who holds hands-off, why, since and until when (also when another server holds it); empty when free |
+
+- **The deck state** is a JSON file on the Fluent PC (`deck.state_file`), read before every use and written
+  atomically. It lists only how the deck differs from the base worktable: labware put on the deck, base-worktable
+  labware moved or taken off (`"location": null`), tip states and contents. Every change increases `version` and is
+  recorded in `C:\Users\Tecan\OFML\records\deck\<time>_<command>.json`. In a dry run it is changed in memory only.
+- **At the start of every run** (`RunControl.StartRun`, and every command with a run of its own) the backend sends
+  `RemoveLabware` for every base-worktable labware that was moved or taken off, then `AddLabware` for everything on
+  the deck that FluentControl would not have where it is (each in label order; bookkeeping only). They are recorded
+  as their own operation ("Deck: registration at run start", with the deck version) and do not count as commands of
+  the run.
+- **The RGA commands update it** after a successful move (`PlateTransfer`, `Labware.TransferLabware`,
+  `MoveLabwareToBase`, `PutLidOn`); `PlateTransfer`'s positions are a view on it. Labware added only in the open run
+  (`Labware.AddLabware`) is not recorded.
+- **Labels are checked**: with a deck state, a command that uses a labware that is neither on the base worktable nor
+  in the deck state (or one recorded as taken off) is refused before sending, naming the label. Without
+  `deck.state_file` none of this applies and everything works as before.
+- Changes to the layout are refused while a run is open (FluentControl's run already has its layout) or while
+  another server sends; they are allowed while hands-off is held, which is when the deck should be changed.
+- **Hands-off** is the shared lock held on behalf of `Who`: every server on the Fluent PC refuses FluentControl
+  commands with "hands-off by Franka (puts a plate on ..., since ...)", and `Fluent - Status` shows it
+  (`CurrentOperation`, `Ready` false). After `MaxMinutes` it is released with a warning in the log and a record in
+  `C:\Users\Tecan\OFML\records\hands_off`; the operating system releases it when the holding server ends.
+- **Not confirmed on the instrument yet** (see the open questions in the spec): that `RemoveLabware` + `AddLabware`
+  of a rack makes FluentControl take it as full and keep its count of used tips in later runs (GetTips keeps its
+  timeout meanwhile), what happens to a lid of a labware that is removed and added again, and that every label the
+  01-07 commands use is found on the parsed base worktable.
 
 ### Temperature-controlled and shaking devices (combined server and the device servers)
 

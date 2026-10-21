@@ -1,5 +1,6 @@
-"""Every server assembly serves exactly the features of docs/device_naming_spec.md section 1, with those fully
-qualified identifiers and display names (docs/feature_identifiers.md). Nothing is sent; the apps are only built."""
+"""Every server assembly serves exactly the features of docs/device_naming_spec.md section 1 (and Deck and HandsOff of
+docs/deck_state_spec.md), with those fully qualified identifiers and display names (docs/feature_identifiers.md).
+Nothing is sent; the apps are only built."""
 
 import asyncio
 import importlib

@@ -31,6 +31,13 @@ schema allows only lower-case letters and dots in a category, and SiLA clients r
 | Incubator1 | `jp.riken.bdr/fluent/Incubator1Controller/v1` | `jp.riken.bdr/tecan.incubator/Incubator1/v1` | Incubator1 - Temperature, Shaker & Door | `Incubator1` (`features/incubator1/incubator1.py`) |
 | Demo | `jp.riken.bdr/fluent/ColorMixDemo/v1` | `jp.riken.bdr/demo/ColorMix/v1` | Demo - Color Mix & Measure | `ColorMix` (`features/demo/colormix.py`) |
 
+Features added later (no old identifier; served by `fluent780_all` and `fluent780`, docs/deck_state_spec.md):
+
+| Device | Identifier | Display name | Python class (module) |
+|---|---|---|---|
+| Fluent | `jp.riken.bdr/tecan.fluent/Deck/v1` | Fluent - Deck | `Deck` (`features/fluent/deck.py`) |
+| Fluent | `jp.riken.bdr/tecan.fluent/HandsOff/v1` | Fluent - Hands Off | `HandsOff` (`features/fluent/hands_off.py`) |
+
 Descriptions that named another feature follow the new names, e.g. "RunController.StartRun" -> "RunControl.StartRun",
 "AbsorbanceReader.Methods" -> "Absorbance.Methods", and the error message "Start a run first
 (RunController.StartRun)" -> "(RunControl.StartRun)".

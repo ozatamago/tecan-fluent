@@ -123,6 +123,55 @@ worktable that `OFML_ApiHost` uses), `handoff_sites` (list of location/site pair
 - Feature identifiers and names in `tests/apps/test_feature_identifiers.py`; add the new features to the
   `fluent780_all` and `fluent780` apps (and later the Fluent 480 app).
 
+## Implementation notes (2026-10-21)
+
+Implemented in `io/fluent/deck/state.py` (`DeckState`, `DeckConfig`), `io/fluentcontrol/hands_off.py`,
+`features/fluent/deck.py` and `features/fluent/hands_off.py`; tested offline and in dry-run mode only.
+
+Where the implementation differs from or adds to the text above:
+
+- `deck.state_file` defaults to empty (no deck state), so a configuration copied before this change keeps working
+  unchanged (no run-start registration, no label check, the tracker keeps `labware_positions.json`). The Fluent PC
+  examples of `fluent780_all` and `fluent780` set `C:\Users\Tecan\OFML\state\deck.json`.
+- Each entry also keeps `"base"`: its position on the base worktable, or null for labware that is not part of it. It
+  is looked up in the definition index when the entry is made, so the start of a run needs no index. Base-worktable
+  labware at its base position stays listed only while contents, a tip state or a lid are recorded for it.
+- Registration order: first every `RemoveLabware`, then every `AddLabware`, each in label order (rather than
+  Remove/Add per labware), so that a labware moved onto the base position of another moved labware finds its site
+  free. It is recorded as its own operation "Deck: registration at run start" (manifest key `deck` with the version)
+  and does not count as a command of the run. Every operation's record has `deck.version` when a deck state is used.
+- The label check accepts labels added by an `AddLabware` of the same operation or earlier in the open run, and a
+  `RemoveLabware` of a labware recorded as taken off (the registration itself).
+- `base_worktable` is checked against `fluent.definitions.workspace` (the worktable the definition check already
+  uses for OFML_ApiHost), and the file's `base_worktable` against both.
+- Writing over SSH is atomic on the Fluent PC side (copy to `<file>.tmp`, then `Move-Item -Force`); a change refuses
+  if the version in the file changed since it was read (another server).
+- Tip racks: a "full" rack is registered at the next run start and then marked `registered_at`; from then on a rack
+  at its base position is left to FluentControl's own count. A rack away from its base position is added at every run
+  start (as all labware away from base), i.e. as a full rack each time.
+- `MoveLabwareToBase` and `PutLidOn` of labware in the deck state that is not on the base worktable are refused
+  (its base position is not known). `PutLidOn` records the lid back at its base position: it assumes the lid goes
+  back onto the plate it belongs to on the base worktable.
+- `SetContents` is allowed during a run (it does not change FluentControl's layout); the other Deck changes are
+  refused during a run and while another server holds the lock for anything but hands-off.
+- `HandsOff.Begin` takes `MaxMinutes` as an integer; 0 means `deck.hands_off_max_minutes`, which is also the upper
+  limit. Without `fluent.shared_lock` only the holding server refuses. `End` does not trigger a deck check yet
+  (step 6). Begin, End and the release after MaxMinutes are recorded in `OFML\records\hands_off`.
+- `handoff_sites` is read and kept, but nothing uses it yet (step 4).
+
+Open questions (to check on the instrument and in the FluentControl manual; nothing relies on them yet, and GetTips
+keeps its timeout):
+
+- Is there a FluentControl statement that sets the next tip position or refills a rack? Not investigated on the
+  device; until then a full rack is registered with RemoveLabware + AddLabware.
+- Does a rack registered with RemoveLabware + AddLabware count as full, and does FluentControl keep its count of used
+  tips for it in the following runs (which start from the worktable again)? For a rack away from its base position,
+  being added as full at every run start is wrong once tips were used.
+- What happens to a lid (`HasLid` is always False in AddLabware; the `lid` field is only recorded) when a plate with
+  a lid is removed and added again?
+- Are all labels the existing commands use (tip racks, the DiTi waste, fingers, troughs) found on the base
+  worktable as parsed from the definition index, so that the label check does not refuse them?
+
 ## Not in this spec
 
 Moving labware between a hand-over site and working sites (step 4 commands), camera checks (step 6), and the

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The deck state (docs/deck_state_spec.md): a JSON file on the Fluent PC (`deck.state_file`) with how the deck
+  differs from the base worktable. At the start of every run, `RemoveLabware` / `AddLabware` bring FluentControl's
+  record in line with it (recorded as their own operation). With a deck state, labware that is neither on the base
+  worktable nor in the deck state is refused before sending, the RGA commands update it after each move, and the
+  labware tracker of `PlateTransfer` is a view on it (taking over `labware_positions.json` once). Without
+  `deck.state_file` nothing changes.
+- `Fluent - Deck` (`jp.riken.bdr/tecan.fluent/Deck/v1`): `Layout`, `PlaceLabware`, `RemoveLabware`,
+  `MoveLabwareRecord`, `SetContents`, `PlaceTipRack` and `TipRacks`. Nothing moves.
+- `Fluent - Hands Off` (`jp.riken.bdr/tecan.fluent/HandsOff/v1`): `Begin`, `End` and `State`. Holds the shared
+  FluentControl lock on behalf of another robot working on the deck, so every server refuses with "hands-off by
+  ..."; released by itself after `MaxMinutes`. `Fluent - Status` shows it.
+- Both features in the `fluent780_all` and `fluent780` servers, with a `deck` section in their configuration (the
+  Fluent PC examples use `C:\Users\Tecan\OFML\state\deck.json`).
+
 - A lock shared by every server on the Fluent PC (`fluent.shared_lock`), so that only one server at a time sends to
   FluentControl or keeps a run open; others are refused with the name of the holder, and `Fluent - Status` shows it.
 
