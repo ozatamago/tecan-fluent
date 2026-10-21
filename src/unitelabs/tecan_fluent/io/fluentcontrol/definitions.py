@@ -64,6 +64,20 @@ class DefinitionCheckFailed(Exception):
 
 
 @dataclasses.dataclass
+class DefinitionView:
+    """What the deck state checks against: the labware types defined in FluentControl, and the locations and labware
+    of the base worktable (the worktable OFML_ApiHost uses)."""
+
+    worktable: str
+    labware_types: set
+    """Names of every component definition (labware, tips, carriers)."""
+    sites: dict
+    """Location name -> number of sites on the base worktable."""
+    labware: dict
+    """Labware placed on the base worktable: label -> {"type", "location", "site"} (site from 1)."""
+
+
+@dataclasses.dataclass
 class DefinitionsConfig(Config):
     """Checking of definitions and where records are kept."""
 
@@ -250,6 +264,11 @@ class FluentPc:
         text = out.decode("utf-8-sig").replace("\r", "")
         return text[2:] if text.startswith("1") else None
 
+    def replace_file(self, path: str, text: str) -> None:
+        """Write a file on the Fluent PC atomically: to a temporary file next to it, then replace the file with it."""
+        self.write_file(path + ".tmp", text)
+        self._ssh(f"powershell -NoProfile -Command \"Move-Item -Force -LiteralPath '{path}.tmp' '{path}'\"")
+
     def write_file(self, path: str, text: str) -> None:
         folder = path.rsplit("\\", 1)[0]
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as f:
@@ -383,6 +402,10 @@ class Preflight:
         """Changes found by the last refused check: relative path -> {name, accepted, now}."""
         self.last_record = ""
         self._workspace_cache: tuple[str, tuple] | None = None
+        self._base_labware_cache: tuple[str, dict] | None = None
+        self.labware_check = None
+        """Optional check of the labware labels an operation uses (set when a deck state is configured):
+        called with (labels, labels on the base worktable, steps), returns (problems, information for the record)."""
 
     # ---- where records go
     def location(self, remote_rel: str) -> str:
@@ -517,6 +540,36 @@ class Preflight:
         self._workspace_cache = (sha, result)
         return result
 
+    def _workspace_rel(self, index: dict[str, dict]) -> str | None:
+        hits = sorted(
+            p for p, e in index.items() if p.lower().endswith(".xwsp") and e.get("name") == self.config.workspace
+        )
+        return hits[0] if hits else None
+
+    def definition_view(self) -> DefinitionView:
+        """The labware types, locations and labware of the base worktable, from the definition index. Raises
+        DefinitionCheckFailed when the Fluent PC cannot be reached or the worktable is not defined."""
+        index = self.pc.index()
+        rel = self._workspace_rel(index)
+        if rel is None:
+            raise DefinitionCheckFailed(f"Worktable '{self.config.workspace}' is not defined in FluentControl")
+        groups, _ = self._workspace(index, rel)
+        sha = index[rel]["sha256"]
+        if not self._base_labware_cache or self._base_labware_cache[0] != sha:
+            sites = {
+                pathlib.PureWindowsPath(p).stem: e.get("location", "")
+                for p, e in index.items()
+                if p.lower().endswith(".xsit")
+            }
+            comps = {
+                pathlib.PureWindowsPath(p).stem: e.get("name", "")
+                for p, e in index.items()
+                if p.lower().endswith(".xcmp")
+            }
+            self._base_labware_cache = (sha, workspace_labware(self.pc.read(rel), sites, comps))
+        types = {e.get("name", "") for p, e in index.items() if p.lower().endswith(".xcmp")} - {""}
+        return DefinitionView(self.config.workspace, types, dict(groups), dict(self._base_labware_cache[1]))
+
     def begin(
         self, steps: list[tuple[str, str]], what: str, session: str = "", extra: dict | None = None
     ) -> "RunRecord":
@@ -577,6 +630,10 @@ class Preflight:
 
         ws_rel = need(self.config.workspace, ".xwsp", "Worktable")
         groups, placed = self._workspace(index, ws_rel) if ws_rel else ({}, set())
+        if self.labware_check is not None and ws_rel:
+            deck_problems, deck_info = self.labware_check(refs.get("labware", []), set(placed), steps)
+            problems += deck_problems
+            manifest["deck"] = deck_info
         runtime = self.runtime_labware(index)
         placed = set(placed) | set(runtime)
         rt_rel = next(

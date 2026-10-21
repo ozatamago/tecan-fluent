@@ -21,6 +21,7 @@ def _offline(tmp_path, monkeypatch):
         "run_ps",
         "read_file",
         "write_file",
+        "replace_file",
         "_ssh",
         "_scp",
     ):

@@ -10,8 +10,10 @@ Flow (one operation = one FluentControl run, unless a run was opened with StartR
 2. (RunModeRunFinished counts as idle. FluentControl has already closed the method, so go straight on)
 3. PrepareMethod("OFML_ApiHost") -> RunMethod
 4. Wait for the execution channel to open (OFML_ApiHost is then accepting external commands)
-5. ExecuteCommand(XML of each statement, e.g. the ODTC macro)
-6. FinishCommand -> wait for the run to end (RunModeRunFinished)
+5. With a deck state (io/fluent/deck/state.py): RemoveLabware / AddLabware so that FluentControl's record matches the
+   deck (bookkeeping only, recorded on its own)
+6. ExecuteCommand(XML of each statement, e.g. the ODTC macro)
+7. FinishCommand -> wait for the run to end (RunModeRunFinished)
 
 The ODTC macro XML (io/odtc/macros.py) is identical to what ran on the device in the 2026-10-09 qPCR water demo
 (odtc() in qpcr_water_demo.py).
@@ -117,6 +119,28 @@ class FluentControlBackend:
         """DeckCameras: images of the deck at StartRun and EndRun (set by the server; None means no images)."""
         self._session = None
         """Run opened by StartRun: {"rel": records folder, "started": str, "commands": int}. None when none is open."""
+        self.deck = None
+        """DeckState registered at the start of every run (set by the server with attach_deck; None means none)."""
+        self.hands_off = None
+        """HandsOff of this server (set by the server): while it is held, every operation is refused."""
+
+    def attach_deck(self, deck) -> None:
+        """Register this deck state at the start of every run, and refuse labware labels it does not know."""
+        self.deck = deck
+        self.preflight.labware_check = lambda labels, base, steps: deck.check_labels(
+            steps, base, set(self.session_labware)
+        )
+
+    def write_record(self, rel: str, data: dict) -> None:
+        """Store a small JSON record at OFML\\records\\<rel> (e.g. deck\\<time>_PlaceLabware.json)."""
+        import json
+        import pathlib
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp) / rel.rsplit("\\", 1)[-1]
+            f.write_text(json.dumps(data, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+            self.preflight.store(f, rel, [])
 
     # ---- Synchronous SiLA2 client (called from a worker thread)
     def _c(self):
@@ -189,14 +213,21 @@ class FluentControlBackend:
         """
         what = self.current_operation or steps[0][0]
         session = self._session["rel"] if self._session else ""
+        # a run of their own starts from the worktable, so the deck state is registered first (an open run had it
+        # registered at StartRun)
+        deck = None if self._session else self._deck_begin(session)
         try:
             record = self.preflight.begin(steps, what, session, extra)
         except DefinitionCheckFailed as exc:
+            if deck is not None:
+                deck[1].finish({"status": "not sent", "reason": "the operation was refused"})
             raise BackendError(str(exc)) from None
         if self._session:
             self._session["commands"] += 1
         try:
             if self.config.dry_run:
+                if deck is not None:
+                    self._deck_send(deck, report)
                 for label, xml in steps:
                     logger.info("dry-run: would have sent %s\n%s", label, xml)
                     report("dry-run")
@@ -208,10 +239,14 @@ class FluentControlBackend:
             else:
                 self._open_run(report)
                 try:
+                    if deck is not None:
+                        self._deck_send(deck, report)
                     durations = self._execute(steps, report)
                 finally:
                     self._close_run(report)
         except Exception as exc:
+            if deck is not None and not deck[3]:
+                deck[1].finish({"status": "not sent", "reason": f"{type(exc).__name__}: {exc}"})
             record.finish({"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
             raise
         result = {"status": "ok", "seconds": durations, "in_open_run": bool(self._session)}
@@ -225,6 +260,45 @@ class FluentControlBackend:
         if not self.config.dry_run:
             self.preflight.forget_dry_runs()  # dry-run records are only kept until a real operation has run
         return durations
+
+    # ---- The deck state at the start of a run
+    def _deck_begin(self, session: str):
+        """Check the deck registration and start its record: [steps, record, info, sent], or None when there is no
+        deck state or nothing to register. Refuses (BackendError) if the deck state cannot be read or a definition
+        does not fit."""
+        if self.deck is None:
+            return None
+        steps, info = self.deck.registration()
+        if not steps:
+            return None
+        try:
+            record = self.preflight.begin(steps, "Deck: registration at run start", session, {"deck": info})
+        except DefinitionCheckFailed as exc:
+            raise BackendError(f"Registering the deck state was refused: {exc}") from None
+        return [steps, record, info, False]
+
+    def _deck_send(self, deck: list, report) -> None:
+        """Send the deck registration (only logged in a dry run) and finish its record."""
+        steps, record, info, _ = deck
+        deck[3] = True
+        try:
+            if self.config.dry_run:
+                for label, xml in steps:
+                    logger.info("dry-run: would have sent %s\n%s", label, xml)
+                    report(f"Run start: {label}")
+                durations = [0.0 for _ in steps]
+            else:
+                durations = self._execute([(f"Run start: {label}", xml) for label, xml in steps], report)
+        except Exception as exc:
+            record.finish({"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+            raise BackendError(f"Registering the deck state at the start of the run failed: {exc}") from None
+        record.finish({"status": "ok", "seconds": durations, "deck_version": info["version"]})
+        if self._session:  # registered with AddLabware: known in this run like labware added with Labware.AddLabware
+            self.session_labware.update(info["added"])
+        try:
+            self.deck.registered(info)
+        except Exception as exc:  # noqa: BLE001 - FluentControl has the racks already; only the note is missing
+            logger.warning("Could not note the racks registered as full: %s", exc)
 
     def _open_run(self, report) -> None:
         """Start OFML_ApiHost and wait until its execution channel accepts commands."""
@@ -318,12 +392,23 @@ class FluentControlBackend:
 
         if self._session:
             raise BackendError(f"A run is already open (since {self._session['started']})")
+        if self.deck is not None:
+            self.deck.load()  # refuse before the run starts if the deck state cannot be read
         if not self.config.dry_run:
             self._open_run(report)
         started = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self._session = {"rel": self._session_rel(started), "started": started, "commands": 0}
         self.session_labware = {}
         self.tips = {}
+        try:
+            deck = self._deck_begin(self._session["rel"])
+            if deck is not None:
+                self._deck_send(deck, report)
+        except Exception:
+            self._session = None
+            if not self.config.dry_run:
+                self._close_run(report)
+            raise
         self._session["images_start"] = self._deck_images("start")
         self._write_session(
             {"started": started, "dry_run": self.config.dry_run, "images_start": self._session["images_start"]}
@@ -399,6 +484,8 @@ class FluentControlBackend:
         """Only one operation sending commands to FluentControl may run at a time in this server. A refusal names it."""
         if self._lock.locked():
             raise BackendError(f"Another operation is running ({self.current_operation})")
+        if self.hands_off is not None:
+            self.hands_off.check()  # refuses while another robot works on the deck
         async with self._lock:
             if self.shared is not None:
                 self.shared.acquire(what)  # refuses while another server on the Fluent PC uses FluentControl
@@ -475,6 +562,11 @@ class FluentControlBackend:
         """The name other servers see when this one holds the shared lock (set to the SiLA server name)."""
         if self.shared is not None:
             self.shared.owner = name
+
+    @property
+    def hands_off_text(self) -> str:
+        """'hands-off by <who> (<reason>, since ...)' while this server holds hands-off, else ""."""
+        return self.hands_off.text if self.hands_off is not None else ""
 
     def other_server(self) -> str:
         """The other server on the Fluent PC that uses FluentControl now ("" if none or no shared lock)."""

@@ -313,3 +313,22 @@ def test_open_run_takes_deck_images_at_start_and_end(tmp_path):
         assert len(info["images_start"]) == 3 and len(info["images_end"]) == 3
 
     asyncio.run(scenario())
+
+
+def test_with_a_deck_state_unknown_labware_is_refused_before_sending(preflight, tmp_path):
+    from unitelabs.tecan_fluent.io.fluent.deck.state import DeckConfig, DeckState
+
+    deck = DeckState(
+        DeckConfig(state_file=str(tmp_path / "deck.json")), "WT_TEST", definitions=preflight.definition_view
+    )
+    preflight.labware_check = lambda labels, base, steps: deck.check_labels(steps, base)
+    preflight.begin([("x", rga_xml("Regrip_Pos", 1))], "on the worktable")  # Plate[001] is on WT_TEST
+    with pytest.raises(DefinitionCheckFailed, match=r"'Added\[001\]' is neither on the base worktable WT_TEST"):
+        preflight.begin([("x", rga_xml("Regrip_Pos", 1, "Added[001]"))], "unknown")
+    # the definition view has the sites and the labware of the worktable
+    view = preflight.definition_view()
+    assert view.sites == {"Regrip_Pos": 1, "Nest7mm_Pos": 2} and set(view.labware) == {"Plate[001]"}
+    assert (view.labware["Plate[001]"]["location"], view.labware["Plate[001]"]["site"]) == ("Nest7mm_Pos", 1)
+    deck.place("Added[001]", "FCA, 200ul SBS", "Nest7mm_Pos", 2)
+    record = preflight.begin([("x", rga_xml("Regrip_Pos", 1, "Added[001]"))], "placed")
+    assert json.loads((record.folder / "manifest.json").read_text())["deck"]["version"] == 1

@@ -8,6 +8,11 @@ next run, aligns FluentControl's record with the actual position via RemoveLabwa
 The positions are kept on the Fluent PC (``C:\\Users\\Tecan\\OFML\\state\\labware_positions.json``) and read
 before every use, so they survive a restart and stay correct whichever computer runs the connector. If the Fluent PC
 cannot be reached, moves are refused rather than guessed. In a dry run, moves are remembered in memory only.
+
+With a deck state (setting deck.state_file, io/fluent/deck/state.py) the tracker is a view on it: positions are read
+from and recorded in the deck state, which takes over labware_positions.json once, and the backend brings
+FluentControl's record in line with it at the start of every run, so a move needs no RemoveLabware / AddLabware of
+its own.
 """
 
 import dataclasses
@@ -39,8 +44,10 @@ class PlateTransferConfig(Config):
 
 
 class LabwareTracker:
-    def __init__(self, config: PlateTransferConfig, pc: FluentPc | None = None, persist: bool = True):
+    def __init__(self, config: PlateTransferConfig, pc: FluentPc | None = None, persist: bool = True, deck=None):
         self.config = config
+        self.deck = deck
+        """The DeckState this tracker is a view on (None: positions_file as before)."""
         # A Windows path is on the Fluent PC: read over SSH from another computer, directly on the Fluent PC itself
         self.remote = bool(re.match(r"^[A-Za-z]:\\", config.positions_file)) and os.name != "nt"
         self.pc = pc
@@ -75,7 +82,10 @@ class LabwareTracker:
 
     @property
     def positions(self) -> dict[str, list]:
-        """Labware that is away from its base position: name -> [location, site]. Read fresh on every use."""
+        """Labware that is away from its base position: name -> [location, site]. Read fresh on every use.
+        With a deck state, this includes every labware on the deck away from its base (or not on the worktable)."""
+        if self.deck is not None:
+            return self.deck.positions()
         return dict(self._dry) if self._dry is not None else self._load()
 
     def spec(self, labware: str) -> dict:
@@ -89,6 +99,10 @@ class LabwareTracker:
 
     def where(self, labware: str) -> tuple[str, int]:
         """Current position as known to this connector; the base position if it has not been moved."""
+        if self.deck is not None:
+            entry = self.deck.entry(labware)
+            if entry is not None and entry.get("location") is None:
+                raise BackendError(f"{labware} is recorded as taken off the deck (Deck.RemoveLabware)")
         if labware in self.positions:
             loc, site = self.positions[labware]
             return loc, int(site)
@@ -97,7 +111,12 @@ class LabwareTracker:
     def moved_away(self, labware: str) -> bool:
         return labware in self.positions
 
-    def record(self, labware: str, location: str, site: int) -> None:
+    def record(self, labware: str, location: str, site: int, by: str = "RGA") -> None:
+        if self.deck is not None:
+            bloc, bsite = self.base(labware)
+            base = {"location": bloc, "site": bsite}
+            self.deck.record_rga_move(labware, location, site, base, self.spec(labware)["type"], moved_by=by)
+            return
         positions = self.positions
         if (location, int(site)) == self.base(labware):
             positions.pop(labware, None)
@@ -113,7 +132,7 @@ class LabwareTracker:
         record."""
         spec = self.spec(labware)
         steps: list[tuple[str, str]] = []
-        if self.moved_away(labware):
+        if self.deck is None and self.moved_away(labware):  # with a deck state, registered at the start of the run
             loc, s = self.where(labware)
             steps += [
                 (f"RemoveLabware {labware} (bookkeeping only)", remove_labware_xml(labware)),
