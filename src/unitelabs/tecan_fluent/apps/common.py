@@ -4,9 +4,11 @@ from unitelabs.cdk import SiLAServerConfig
 
 from .. import __version__
 from ..io.fluent.camera.deck_cameras import DeckCameraConfig, DeckCameras
+from ..io.fluent.deck.state import DeckConfig, DeckState
 from ..io.fluent.gripper.labware_tracker import LabwareTracker, PlateTransferConfig
 from ..io.fluentcontrol.backend import FluentBackendConfig, FluentControlBackend
 from ..io.fluentcontrol.definitions import FluentPc
+from ..io.fluentcontrol.hands_off import HandsOff
 
 
 def sila_server(name: str, type_: str, description: str, uuid: str, port: int) -> SiLAServerConfig:
@@ -22,9 +24,39 @@ def sila_server(name: str, type_: str, description: str, uuid: str, port: int) -
     )
 
 
-def labware_tracker(plates: PlateTransferConfig, fluent: FluentBackendConfig) -> LabwareTracker:
-    """Where the labware moved by the RGA is (kept on the Fluent PC; in memory only in a dry run)."""
-    return LabwareTracker(plates, FluentPc(fluent.definitions), persist=not fluent.dry_run)
+def labware_tracker(
+    plates: PlateTransferConfig, fluent: FluentBackendConfig, deck: DeckState | None = None
+) -> LabwareTracker:
+    """Where the labware moved by the RGA is (kept on the Fluent PC; in memory only in a dry run). With a deck state,
+    the tracker is a view on it."""
+    return LabwareTracker(plates, FluentPc(fluent.definitions), persist=not fluent.dry_run, deck=deck)
+
+
+def deck_state(deck: DeckConfig, plates: PlateTransferConfig, backend: FluentControlBackend) -> DeckState | None:
+    """The deck state, registered by the backend at the start of every run (None without deck.state_file). It takes
+    over the positions of plates.positions_file once."""
+    if not deck.state_file:
+        return None
+    fluent = backend.config
+    state = DeckState(
+        deck,
+        fluent.definitions.workspace,
+        FluentPc(fluent.definitions),
+        persist=not fluent.dry_run,
+        definitions=backend.preflight.definition_view,
+        recorder=backend.write_record,
+        legacy_file=plates.positions_file,
+        legacy_labware=plates.labware,
+    )
+    backend.attach_deck(state)
+    return state
+
+
+def hands_off(deck: DeckConfig, backend: FluentControlBackend) -> HandsOff:
+    """Hands-off of this server, also checked by the backend before every operation."""
+    guard = HandsOff(backend, deck.hands_off_max_minutes)
+    backend.hands_off = guard
+    return guard
 
 
 def deck_cameras(cameras: DeckCameraConfig, backend: FluentControlBackend) -> DeckCameras:

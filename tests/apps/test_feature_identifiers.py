@@ -12,6 +12,8 @@ FEATURES = {
     # identifier: (category, display name)
     "RunControl": ("tecan.fluent", "Fluent - Run (Start / End)"),
     "Status": ("tecan.fluent", "Fluent - Status"),
+    "Deck": ("tecan.fluent", "Fluent - Deck"),
+    "HandsOff": ("tecan.fluent", "Fluent - Hands Off"),
     "LiquidHandling": ("tecan.fluent.arm", "FCA Arm - Liquid Handling"),
     "PlateTransfer": ("tecan.fluent.gripper", "RGA Gripper - Move & Return Plate"),
     "Labware": ("tecan.fluent.gripper", "RGA Gripper - Labware, Lids & Fingers"),
@@ -34,7 +36,16 @@ CORE = {
 }
 APPS = {
     "fluent780_all": set(FEATURES),
-    "fluent780": {"RunControl", "Status", "LiquidHandling", "PlateTransfer", "Labware", "DeckCamera"},
+    "fluent780": {
+        "RunControl",
+        "Status",
+        "LiquidHandling",
+        "PlateTransfer",
+        "Labware",
+        "DeckCamera",
+        "Deck",
+        "HandsOff",
+    },
     "odtc": {"Door", "Methods", "Temperatures", "Status"},
     "infinite": {"Tray", "Absorbance", "PlateHandling", "Status"},
     "infinite_usb": {"Tray", "Absorbance"},
@@ -72,7 +83,7 @@ def test_app_serves_the_features_of_the_table(app):
 
 def test_combined_app_has_every_device_feature_and_the_core_features():
     features = served("fluent780_all")
-    assert len(features) == 17 + 2
+    assert len(features) == 19 + 2
     assert {fqi.split("/")[2] for fqi in features if fqi.startswith(ORIGINATOR)} == set(FEATURES)
 
 

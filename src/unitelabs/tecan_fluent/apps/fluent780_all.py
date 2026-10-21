@@ -23,8 +23,10 @@ from ..features.cplc.cooling_heating_plates import CoolingHeatingPlates
 from ..features.demo.colormix import ColorMix
 from ..features.fluent.arm.liquid_handling import LiquidHandling
 from ..features.fluent.camera.deck_camera import DeckCamera
+from ..features.fluent.deck import Deck
 from ..features.fluent.gripper.labware import Labware
 from ..features.fluent.gripper.plate_transfer import PlateTransfer
+from ..features.fluent.hands_off import HandsOff
 from ..features.fluent.run_control import RunControl
 from ..features.fluent.status import Status
 from ..features.incubator1.incubator1 import Incubator1
@@ -36,10 +38,11 @@ from ..features.odtc.door import Door
 from ..features.odtc.methods import Methods
 from ..features.odtc.temperatures import Temperatures
 from ..io.fluent.camera.deck_cameras import DeckCameraConfig
+from ..io.fluent.deck.state import DeckConfig
 from ..io.fluent.gripper.labware_tracker import PlateTransferConfig
 from ..io.fluentcontrol.backend import FluentBackendConfig, FluentControlBackend
 from ..io.infinite.reader import FluentInfiniteReader, InfiniteConfig
-from .common import deck_cameras, labware_tracker, sila_server
+from .common import deck_cameras, deck_state, hands_off, labware_tracker, sila_server
 
 UUID = "7c3f1e9a-2b5d-4a8e-b6c4-0d1f2e3a4b50"
 
@@ -64,6 +67,7 @@ class Fluent780AllConnectorConfig(ConnectorBaseConfig):
     infinite: InfiniteConfig = dataclasses.field(default_factory=InfiniteConfig)
     plates: PlateTransferConfig = dataclasses.field(default_factory=PlateTransferConfig)
     cameras: DeckCameraConfig = dataclasses.field(default_factory=DeckCameraConfig)
+    deck: DeckConfig = dataclasses.field(default_factory=DeckConfig)
 
 
 def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
@@ -71,7 +75,8 @@ def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
     backend = FluentControlBackend(config.fluent)
     backend.lock_owner = config.sila_server.name
     reader = FluentInfiniteReader(backend, config.infinite)
-    tracker = labware_tracker(config.plates, config.fluent)
+    deck = deck_state(config.deck, config.plates, backend)
+    tracker = labware_tracker(config.plates, config.fluent, deck)
     cameras = deck_cameras(config.cameras, backend)
     liquid = LiquidHandling(backend)
     return [
@@ -98,6 +103,8 @@ def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
         DeckCamera(cameras),
         RunControl(backend),
         Status(backend),
+        Deck(backend, deck),
+        HandsOff(hands_off(config.deck, backend)),
     ]
 
 

@@ -10,14 +10,17 @@ from unitelabs.cdk import Connector, ConnectorBaseConfig, SiLAServerConfig, sila
 
 from ..features.fluent.arm.liquid_handling import LiquidHandling
 from ..features.fluent.camera.deck_camera import DeckCamera
+from ..features.fluent.deck import Deck
 from ..features.fluent.gripper.labware import Labware
 from ..features.fluent.gripper.plate_transfer import PlateTransfer
+from ..features.fluent.hands_off import HandsOff
 from ..features.fluent.run_control import RunControl
 from ..features.fluent.status import Status
 from ..io.fluent.camera.deck_cameras import DeckCameraConfig
+from ..io.fluent.deck.state import DeckConfig
 from ..io.fluent.gripper.labware_tracker import PlateTransferConfig
 from ..io.fluentcontrol.backend import FluentBackendConfig, FluentControlBackend
-from .common import deck_cameras, labware_tracker, sila_server
+from .common import deck_cameras, deck_state, hands_off, labware_tracker, sila_server
 
 UUID = "17ad5c72-0927-4823-945c-8e8fe70e3f6a"
 
@@ -39,13 +42,15 @@ class Fluent780ConnectorConfig(ConnectorBaseConfig):
     fluent: FluentBackendConfig = dataclasses.field(default_factory=FluentBackendConfig)
     plates: PlateTransferConfig = dataclasses.field(default_factory=PlateTransferConfig)
     cameras: DeckCameraConfig = dataclasses.field(default_factory=DeckCameraConfig)
+    deck: DeckConfig = dataclasses.field(default_factory=DeckConfig)
 
 
 def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
     """Build the Features of the Fluent, sharing one backend."""
     backend = FluentControlBackend(config.fluent)
     backend.lock_owner = config.sila_server.name
-    tracker = labware_tracker(config.plates, config.fluent)
+    deck = deck_state(config.deck, config.plates, backend)
+    tracker = labware_tracker(config.plates, config.fluent, deck)
     cameras = deck_cameras(config.cameras, backend)
     return [
         RunControl(backend),
@@ -54,6 +59,8 @@ def build_features(config: Fluent780ConnectorConfig) -> list[sila.Feature]:
         PlateTransfer(backend, tracker),
         Labware(backend, tracker),
         DeckCamera(cameras),
+        Deck(backend, deck),
+        HandsOff(hands_off(config.deck, backend)),
     ]
 
 

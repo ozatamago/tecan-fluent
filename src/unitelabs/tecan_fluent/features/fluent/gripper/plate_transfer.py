@@ -106,5 +106,5 @@ class PlateTransfer(sila.Feature):
             self.tracker.spec(labware)
         except BackendError as exc:
             raise PlateTransferFailed(str(exc)) from None
-        self.tracker.record(labware, location, site)
+        self.tracker.record(labware, location, site, by="RecordLabwarePosition")
         return f"{location}[{site}]"

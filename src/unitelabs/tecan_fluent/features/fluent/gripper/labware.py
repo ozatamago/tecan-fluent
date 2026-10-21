@@ -13,7 +13,15 @@ the 01-07 GUI scripts (tests/fixtures/gui_macros and gui_statements):
 They only work inside a run opened with RunControl.StartRun: FluentControl forgets labware added or moved when a
 run ends, so a sequence (add a plate, move it, put a lid on it, ...) must stay in one run. Labware that the
 PlateTransfer tracks across runs (MoveLabware / ReturnLabware) is refused here, so the two never disagree.
+
+With a deck state (io/fluent/deck/state.py), a move of labware that is on the base worktable or in the deck state is
+recorded in the deck state once it has succeeded (labware added in the run itself is not). MoveLabwareToBase and
+PutLidOn of labware in the deck state that is not on the base worktable are refused (its base position is not
+known); PutLidOn records the lid back at its base position, i.e. it assumes the lid goes back onto the plate it
+belongs to on the base worktable.
 """
+
+import asyncio
 
 from unitelabs.cdk import sila
 
@@ -68,6 +76,43 @@ class Labware(sila.Feature):
                         f"{name} is tracked by PlateTransfer; move it with MoveLabware / ReturnLabware"
                     )
 
+    def _base_known(self, labware: str) -> None:
+        """With a deck state: refuse a move to the base position of labware whose base position is not known."""
+        deck = self.backend.deck
+        if deck is None:
+            return
+        try:
+            entry = deck.entry(labware)
+        except BackendError as exc:
+            raise LabwareCommandFailed(str(exc)) from None
+        if entry is not None and not entry.get("base"):
+            raise LabwareCommandFailed(
+                f"{labware} is not on the base worktable, so its base position is not known; use TransferLabware"
+            )
+
+    async def _record_move(self, labware: str, location: str = "", site: int = 0) -> None:
+        """With a deck state: record where the RGA put the labware (no location: back at its base position)."""
+        deck = self.backend.deck
+        if deck is None:
+            return
+
+        def record():
+            if not location:
+                entry = deck.entry(labware)
+                if entry is None or not entry.get("base"):
+                    return  # at its base position already, or added in this run
+                deck.record_rga_move(labware, entry["base"]["location"], entry["base"]["site"])
+            else:
+                deck.record_rga_move(labware, location, site, session_labels=set(self.backend.session_labware))
+
+        try:
+            await asyncio.to_thread(record)
+        except BackendError as exc:
+            raise LabwareCommandFailed(
+                f"{labware} was moved, but the deck state could not be updated ({exc}); "
+                "record the position with Deck.MoveLabwareRecord after EndRun"
+            ) from None
+
     async def _send(self, label: str, xml: str, status: sila.Status) -> None:
         try:
             await with_progress(status, 1, lambda report: self.backend.run_steps([(label, xml)], report, label))
@@ -119,6 +164,7 @@ class Labware(sila.Feature):
         """
         self._check(labware)
         await self._send(f"RGA {labware} -> {location}[{site}]", transfer_xml(labware, location, site), status)
+        await self._record_move(labware, location, site)
 
     @sila.ObservableCommand(errors=[LabwareCommandFailed])
     async def move_labware_to_base(self, labware: str, *, status: sila.Status) -> None:
@@ -129,7 +175,9 @@ class Labware(sila.Feature):
           Labware: Name of the labware, e.g. "Template_Lid_6mm[001]".
         """
         self._check(labware)
+        self._base_known(labware)
         await self._send(f"RGA {labware} -> base", to_base_xml(labware), status)
+        await self._record_move(labware)
 
     @sila.ObservableCommand(errors=[LabwareCommandFailed])
     async def put_lid_on(self, lid: str, plate: str, *, status: sila.Status) -> None:
@@ -141,7 +189,9 @@ class Labware(sila.Feature):
           Plate: Name of the plate, e.g. "TemplatePlate[001]".
         """
         self._check(lid, plate)
+        self._base_known(lid)
         await self._send(f"RGA {lid} -> lid of {plate}", lid_on_xml(lid, plate), status)
+        await self._record_move(lid)
 
     @sila.ObservableCommand(errors=[LabwareCommandFailed])
     async def get_fingers(self, fingers: str, *, status: sila.Status) -> None:
