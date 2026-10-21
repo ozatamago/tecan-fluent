@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sd:VxData xmlns:sd="http://www.tecan.com/TSCC/VisionX/VX/DataStore/VxData"><Payload><ObjectName>Other WT</ObjectName><Comment></Comment><PayloadData><Workspace xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.datacontract.org/2004/07/Tecan.VisionX.Worktable.Core"><Worktables><KeyValue><Key>myWT</Key><Value><Frame></Frame></Value></KeyValue></Worktables></Workspace></PayloadData></Payload></sd:VxData>

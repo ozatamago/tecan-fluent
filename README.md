@@ -53,7 +53,7 @@ name starts with the device, so the UniteLabs App shows the device first.
 | Device | Server (`apps/<app>.py`) | Port | Features (display name) |
 |---|---|---|---|
 | All devices | "Tecan Fluent 780 (All devices)" (`fluent780_all`; also `unitelabs.tecan_fluent:create_app`) | 50060 | all of the features below |
-| Fluent 780 | "Tecan Fluent 780" (`fluent780`) | 50062 | `RunControl` (Fluent - Run (Start / End)), `Status` (Fluent - Status), `LiquidHandling` (FCA Arm - Liquid Handling), `PlateTransfer` (RGA Gripper - Move & Return Plate), `Labware` (RGA Gripper - Labware, Lids & Fingers), `DeckCamera` (Deck Cameras), `Deck` (Fluent - Deck), `HandsOff` (Fluent - Hands Off) |
+| Fluent 780 | "Tecan Fluent 780" (`fluent780`) | 50062 | `RunControl` (Fluent - Run (Start / End)), `Status` (Fluent - Status), `LiquidHandling` (FCA Arm - Liquid Handling), `PlateTransfer` (RGA Gripper - Move & Return Plate), `Labware` (RGA Gripper - Labware, Lids & Fingers), `DeckCamera` (Deck Cameras), `Deck` (Fluent - Deck), `HandsOff` (Fluent - Hands Off), `LabCapabilities` (Fluent - Lab Capabilities) |
 | Inheco ODTC 96 | "Inheco ODTC (Fluent 780)" (`odtc`; the stand-alone server is the inheco-odtc repository) | 50061 | `Door` (ODTC - Door), `Methods` (ODTC - Temperature Programs), `Temperatures` (ODTC - Temperatures), `Status` |
 | Tecan Infinite 200 PRO | "Tecan Infinite 200 PRO" (`infinite`) | 50063 | `Tray` (Infinite - Tray), `Absorbance` (Infinite - Absorbance), `PlateHandling` (Infinite - Plate In / Out (RGA)), `Status` |
 | BioShake Q1 | "BioShake" (`bioshake`) | 50064 | `BioShake` (BioShake - Shake & Heat), `Status` |
@@ -380,6 +380,16 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
   of a rack makes FluentControl take it as full and keep its count of used tips in later runs (GetTips keeps its
   timeout meanwhile), what happens to a lid of a labware that is removed and added again, and that every label the
   01-07 commands use is found on the parsed base worktable.
+
+### Lab capabilities (combined server and Fluent server)
+
+`LabCapabilities` describes what this Fluent can hold and do, for planning tools that survey several instruments
+(docs/lab_capabilities_spec.md). Read only. `Places`, `LabwareTypes`, `TipTypes` and `LiquidClasses` are read from the
+FluentControl database (so the server has to run on the Fluent PC; elsewhere they fail with `DatabaseUnavailable`);
+`Arms`, `Instruments`, `Constraints` and `Notes` are kept in the connector, each rule with its basis; `Commands` lists
+the commands of the server; `CurrentStateJson` gives the state, and `CapabilitiesJson` everything as one JSON document
+(schema `riken-fluent-capabilities/1`). The `capabilities` section of the configuration sets the database folder, the
+worktable (empty: `fluent.definitions.workspace`) and how long a reading is kept (`cache_s`, default 600 s).
 
 ### Temperature-controlled and shaking devices (combined server and the device servers)
 

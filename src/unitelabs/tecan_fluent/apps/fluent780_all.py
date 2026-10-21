@@ -27,6 +27,7 @@ from ..features.fluent.deck import Deck
 from ..features.fluent.gripper.labware import Labware
 from ..features.fluent.gripper.plate_transfer import PlateTransfer
 from ..features.fluent.hands_off import HandsOff
+from ..features.fluent.lab_capabilities import CapabilitiesConfig, LabCapabilities
 from ..features.fluent.run_control import RunControl
 from ..features.fluent.status import Status
 from ..features.incubator1.incubator1 import Incubator1
@@ -68,6 +69,7 @@ class Fluent780AllConnectorConfig(ConnectorBaseConfig):
     plates: PlateTransferConfig = dataclasses.field(default_factory=PlateTransferConfig)
     cameras: DeckCameraConfig = dataclasses.field(default_factory=DeckCameraConfig)
     deck: DeckConfig = dataclasses.field(default_factory=DeckConfig)
+    capabilities: CapabilitiesConfig = dataclasses.field(default_factory=CapabilitiesConfig)
 
 
 def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
@@ -79,7 +81,7 @@ def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
     tracker = labware_tracker(config.plates, config.fluent, deck)
     cameras = deck_cameras(config.cameras, backend)
     liquid = LiquidHandling(backend)
-    return [
+    features: list[sila.Feature] = [
         # RGA
         PlateTransfer(backend, tracker),
         Labware(backend, tracker),
@@ -106,6 +108,8 @@ def build_features(config: Fluent780AllConnectorConfig) -> list[sila.Feature]:
         Deck(backend, deck),
         HandsOff(hands_off(config.deck, backend)),
     ]
+    features.append(LabCapabilities(config.capabilities, backend, deck, list(features)))
+    return features
 
 
 async def create_app(config: Fluent780AllConnectorConfig) -> collections.abc.AsyncGenerator[Connector, None]:

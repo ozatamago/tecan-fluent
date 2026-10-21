@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sd:VxData xmlns:sd="http://www.tecan.com/TSCC/VisionX/VX/DataStore/VxData"><Payload><ObjectName>RGA 1</ObjectName><Comment></Comment><PayloadData><DriverConfiguration><Data><Settings><GripDetection>1</GripDetection><RegripStation>Regrip_Test</RegripStation><Force>20</Force><Speed>80</Speed></Settings></Data></DriverConfiguration></PayloadData></Payload></sd:VxData>

@@ -41,6 +41,7 @@ def test_all_features_are_there_with_unique_names():
         "Status",
         "Deck",
         "HandsOff",
+        "LabCapabilities",
     ]
     assert len(set(names)) == len(names)
 

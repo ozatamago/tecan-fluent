@@ -1,5 +1,5 @@
 """Every server assembly serves exactly the features of docs/device_naming_spec.md section 1 (and Deck and HandsOff of
-docs/deck_state_spec.md), with those fully qualified identifiers and display names (docs/feature_identifiers.md).
+docs/deck_state_spec.md, and LabCapabilities of docs/lab_capabilities_spec.md), with those fully qualified identifiers and display names (docs/feature_identifiers.md).
 Nothing is sent; the apps are only built."""
 
 import asyncio
@@ -15,6 +15,7 @@ FEATURES = {
     "Status": ("tecan.fluent", "Fluent - Status"),
     "Deck": ("tecan.fluent", "Fluent - Deck"),
     "HandsOff": ("tecan.fluent", "Fluent - Hands Off"),
+    "LabCapabilities": ("tecan.fluent", "Fluent - Lab Capabilities"),
     "LiquidHandling": ("tecan.fluent.arm", "FCA Arm - Liquid Handling"),
     "PlateTransfer": ("tecan.fluent.gripper", "RGA Gripper - Move & Return Plate"),
     "Labware": ("tecan.fluent.gripper", "RGA Gripper - Labware, Lids & Fingers"),
@@ -46,6 +47,7 @@ APPS = {
         "DeckCamera",
         "Deck",
         "HandsOff",
+        "LabCapabilities",
     },
     "odtc": {"Door", "Methods", "Temperatures", "Status"},
     "infinite": {"Tray", "Absorbance", "PlateHandling", "Status"},
@@ -84,7 +86,7 @@ def test_app_serves_the_features_of_the_table(app):
 
 def test_combined_app_has_every_device_feature_and_the_core_features():
     features = served("fluent780_all")
-    assert len(features) == 19 + 2
+    assert len(features) == 20 + 2
     assert {fqi.split("/")[2] for fqi in features if fqi.startswith(ORIGINATOR)} == set(FEATURES)
 
 

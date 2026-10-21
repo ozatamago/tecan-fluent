@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Fluent - Lab Capabilities` (`jp.riken.bdr/tecan.fluent/LabCapabilities/v1`, docs/lab_capabilities_spec.md): read
+  only description of the Fluent for planning across a lab. Places with the labware they accept, gripper modes and
+  pipetting access, labware and tip types and liquid classes are read from the FluentControl database; arms,
+  instruments, rules (with their basis) and notes are kept in the connector; the commands of the server are
+  introspected; `CurrentStateJson` and `CapabilitiesJson` (schema `riken-fluent-capabilities/1`). In the
+  `fluent780_all` and `fluent780` servers, with a `capabilities` section in their configuration.
 - The deck state (docs/deck_state_spec.md): a JSON file on the Fluent PC (`deck.state_file`) with how the deck
   differs from the base worktable. At the start of every run, `RemoveLabware` / `AddLabware` bring FluentControl's
   record in line with it (recorded as their own operation). With a deck state, labware that is neither on the base
