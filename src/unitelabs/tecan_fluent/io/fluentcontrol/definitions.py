@@ -74,7 +74,11 @@ class DefinitionView:
     sites: dict
     """Location name -> number of sites on the base worktable."""
     labware: dict
-    """Labware placed on the base worktable: label -> {"type", "location", "site"} (site from 1)."""
+    """Labware FluentControl starts a run with: label -> {"type", "location", "site"} (site from 1). The labware of the
+    base worktable, and the labware of the RuntimeWorkspace that is not on it (labware added in earlier runs stays
+    there, e.g. 96 Well Flat_Custom[001] and 4 Well SBS Trough[001])."""
+    runtime: set = dataclasses.field(default_factory=set)
+    """Labels in labware that come from the RuntimeWorkspace only."""
 
 
 @dataclasses.dataclass
@@ -568,7 +572,18 @@ class Preflight:
             }
             self._base_labware_cache = (sha, workspace_labware(self.pc.read(rel), sites, comps))
         types = {e.get("name", "") for p, e in index.items() if p.lower().endswith(".xcmp")} - {""}
-        return DefinitionView(self.config.workspace, types, dict(groups), dict(self._base_labware_cache[1]))
+        base = dict(self._base_labware_cache[1])
+        runtime = {k: v for k, v in self.runtime_labware(index).items() if k not in base}
+        return DefinitionView(self.config.workspace, types, dict(groups), {**runtime, **base}, set(runtime))
+
+    def runtime_labels(self) -> set | None:
+        """Labels on FluentControl's RuntimeWorkspace now, or None when they cannot be read (or checks are off)."""
+        if not self.config.enabled:
+            return None
+        try:
+            return set(self.runtime_labware(self.pc.index()))
+        except DefinitionCheckFailed:
+            return None
 
     def begin(
         self, steps: list[tuple[str, str]], what: str, session: str = "", extra: dict | None = None
@@ -630,11 +645,12 @@ class Preflight:
 
         ws_rel = need(self.config.workspace, ".xwsp", "Worktable")
         groups, placed = self._workspace(index, ws_rel) if ws_rel else ({}, set())
+        runtime = self.runtime_labware(index)
         if self.labware_check is not None and ws_rel:
-            deck_problems, deck_info = self.labware_check(refs.get("labware", []), set(placed), steps)
+            # FluentControl starts a run from the RuntimeWorkspace: the worktable plus labware added in earlier runs
+            deck_problems, deck_info = self.labware_check(refs.get("labware", []), set(placed) | set(runtime), steps)
             problems += deck_problems
             manifest["deck"] = deck_info
-        runtime = self.runtime_labware(index)
         placed = set(placed) | set(runtime)
         rt_rel = next(
             (

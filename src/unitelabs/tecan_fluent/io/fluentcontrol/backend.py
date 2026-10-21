@@ -268,7 +268,7 @@ class FluentControlBackend:
         does not fit."""
         if self.deck is None:
             return None
-        steps, info = self.deck.registration()
+        steps, info = self.deck.registration(self.preflight.runtime_labels())
         # racks registered in an earlier run are not added again: mark them before the labels of the operation are
         # checked, so a command that uses one is refused
         self.deck.mark_stale(info["stale"])

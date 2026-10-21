@@ -332,3 +332,64 @@ def test_with_a_deck_state_unknown_labware_is_refused_before_sending(preflight, 
     deck.place("Added[001]", "FCA, 200ul SBS", "Nest7mm_Pos", 2)
     record = preflight.begin([("x", rga_xml("Regrip_Pos", 1, "Added[001]"))], "placed")
     assert json.loads((record.folder / "manifest.json").read_text())["deck"]["version"] == 1
+
+
+def test_labware_only_on_the_runtime_workspace_is_known_to_the_deck_state(pc, tmp_path):
+    from unitelabs.tecan_fluent.io.fluent.deck.state import DeckConfig, DeckState
+    from unitelabs.tecan_fluent.io.fluent.gripper.statements import add_labware_xml, remove_labware_xml
+
+    # FluentControl keeps labware added in earlier runs on its RuntimeWorkspace (e.g. 4 Well SBS Trough[001])
+    trough = (
+        "<ConnectedComponent><CarrierOrLabwareTemplateGUID>tip200</CarrierOrLabwareTemplateGUID>"
+        "<LabwareName><a:KeyValueOfstringstring><a:Key>default</a:Key><a:Value>Trough[001]</a:Value>"
+        "</a:KeyValueOfstringstring></LabwareName></ConnectedComponent>"
+    )
+    pc.files[r"SystemSpecific\Worktable\Workspaces\runtime.xwsp"] = vx(
+        "RuntimeWorkspace",
+        f'<Workspace xmlns="{C}" xmlns:a="{A}"><Frame><Arrangements>'
+        f"<Arrangement><Sites>{site('s-nest')}{site('s-nest', trough)}</Sites></Arrangement>"
+        "</Arrangements></Frame></Workspace>",
+    ).encode()
+    preflight = Preflight(DefinitionsConfig(workspace="WT_TEST"), dry_run=False, pc=pc, background=False)
+    view = preflight.definition_view()
+    assert view.runtime == {"Trough[001]"} and set(view.labware) == {"Plate[001]", "Trough[001]"}
+    assert view.labware["Trough[001]"] == {"type": "FCA, 200ul SBS", "location": "Nest7mm_Pos", "site": 2}
+    assert preflight.runtime_labels() == {"Trough[001]"}
+
+    deck = DeckState(
+        DeckConfig(state_file=str(tmp_path / "deck.json")), "WT_TEST", definitions=preflight.definition_view
+    )
+    preflight.labware_check = lambda labels, base, steps: deck.check_labels(steps, base)
+    preflight.begin([("x", rga_xml("Regrip_Pos", 1, "Trough[001]"))], "runtime labware")  # not refused
+    # its RuntimeWorkspace position is its base position: moved away, it is removed and added at run start
+    deck.move("Trough[001]", "Regrip_Pos", 1)
+    assert deck.entry("Trough[001]")["base"] == {"location": "Nest7mm_Pos", "site": 2}
+    steps, _ = deck.registration(preflight.runtime_labels())
+    assert [xml for _, xml in steps] == [
+        remove_labware_xml("Trough[001]"),
+        add_labware_xml("FCA, 200ul SBS", "Trough[001]", "Regrip_Pos", 1),
+    ]
+    # labware placed on the deck that FluentControl kept from an earlier run is removed before it is added again
+    deck.place("Placed[001]", "FCA, 200ul SBS", "Nest7mm_Pos", 2)
+    labels = [label for label, _ in deck.registration({"Trough[001]", "Placed[001]"})[0]]
+    assert labels[:2] == [
+        "RemoveLabware Placed[001] (deck state, bookkeeping only)",
+        "RemoveLabware Trough[001] (deck state, bookkeeping only)",
+    ]
+    assert "RemoveLabware Placed[001] (deck state, bookkeeping only)" not in [
+        label for label, _ in deck.registration({"Trough[001]"})[0]
+    ]
+
+
+def test_the_waste_a_statement_names_is_accepted(tmp_path):
+    from unitelabs.tecan_fluent.io.fluent.deck.state import DeckConfig, DeckState
+
+    config = DeckConfig(state_file=str(tmp_path / "deck.json"), waste_labware=["Other Waste[001]"])
+    deck = DeckState(config, "WT_TEST")
+    drop = "<Object><DitiWaste>MCA Thru Deck Waste Chute_1</DitiWaste><LabwareName>Plate[001]</LabwareName></Object>"
+    assert deck.check_labels([("drop", drop)], {"Plate[001]"})[0] == []  # the waste of the Fluent 480
+    wash = "<Object><WashWasteName>&quot;FCA Thru Deck Waste Chute_1&quot;</WashWasteName></Object>"
+    assert deck.check_labels([("wash", wash)], set())[0] == []
+    assert deck.check_labels([("x", "<Object><LabwareName>Other Waste[001]</LabwareName></Object>")], set())[0] == []
+    [problem] = deck.check_labels([("x", "<Object><LabwareName>Elsewhere[001]</LabwareName></Object>")], set())[0]
+    assert "Elsewhere[001]" in problem

@@ -142,6 +142,15 @@ Where the implementation differs from or adds to the text above:
   and does not count as a command of the run. Every operation's record has `deck.version` when a deck state is used.
 - The label check accepts labels added by an `AddLabware` of the same operation or earlier in the open run, and a
   `RemoveLabware` of a labware recorded as taken off (the registration itself).
+- "The base worktable" in the checks means what FluentControl starts a run from: the worktable of OFML_ApiHost plus
+  the labware of the RuntimeWorkspace that is not on it (labware added in earlier runs stays there; on 2026-10-21
+  `96 Well Flat_Custom[001]`, `4 Well SBS Trough[001]` and `96 Well Skirted PCR_Custom[001]` were only there). The
+  RuntimeWorkspace position is taken as the base position of such labware. At run start the RuntimeWorkspace labels
+  are read (`Preflight.runtime_labels`), and a labware placed on the deck that is still on it is removed before it
+  is added again; when they cannot be read (dry run), only AddLabware is sent for placed labware.
+- The DiTi and wash waste a statement names (`DitiWaste`, `WashWasteName`, e.g. `FCA Thru Deck Waste Chute_1`, or
+  `MCA Thru Deck Waste Chute_1` on the Fluent 480) are always accepted, and so are the labels in
+  `deck.waste_labware`; no waste name is built in.
 - `base_worktable` is checked against `fluent.definitions.workspace` (the worktable the definition check already
   uses for OFML_ApiHost), and the file's `base_worktable` against both.
 - Writing over SSH is atomic on the Fluent PC side (copy to `<file>.tmp`, then `Move-Item -Force`); a change refuses
@@ -177,7 +186,12 @@ keeps its timeout):
 - What happens to a lid (`HasLid` is always False in AddLabware; the `lid` field is only recorded) when a plate with
   a lid is removed and added again?
 - Are all labels the existing commands use (tip racks, the DiTi waste, fingers, troughs) found on the base
-  worktable as parsed from the definition index, so that the label check does not refuse them?
+  worktable or the RuntimeWorkspace as parsed from the definition index, so that the label check does not refuse
+  them?
+- Which labware does FluentControl keep on the RuntimeWorkspace between runs: everything added with AddLabware, or
+  only some, and at the added or at the last position? A labware taken off the deck that is not on the base
+  worktable is deleted from the deck state; if FluentControl still has it on the RuntimeWorkspace, the label check
+  accepts it and it takes its site there.
 
 ## Not in this spec
 

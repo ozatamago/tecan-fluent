@@ -71,6 +71,9 @@ class DeckConfig(Config):
     the hand-over commands to come; nothing uses them yet."""
     hands_off_max_minutes: float = 30.0
     """Default and upper limit of HandsOff.Begin's MaxMinutes."""
+    waste_labware: list = dataclasses.field(default_factory=list)
+    """Labels the label check always accepts, besides the DiTi and wash waste a statement names (DitiWaste,
+    WashWasteName), e.g. ["MCA Thru Deck Waste Chute_1"] when a worklist names it elsewhere."""
 
 
 class _File:
@@ -496,7 +499,7 @@ class DeckState:
         return self._change("SetContents", args, fn)
 
     # ---- the start of a run
-    def registration(self) -> tuple[list[tuple[str, str]], dict]:
+    def registration(self, runtime_labels=None) -> tuple[list[tuple[str, str]], dict]:
         """The statements that bring FluentControl's record in line with the deck state at the start of a run, and
         what the record of the run start keeps (version, file, racks registered as full).
 
@@ -510,7 +513,11 @@ class DeckState:
         that are gone. A rack registered in an earlier run is not added again but becomes "used" (stale, listed in
         info["stale"]; mark_stale records it), and racks "used" or "as is" away from their base position are not
         added; check_labels refuses commands that use them. Racks at their base position keep FluentControl's own
-        count."""
+        count.
+
+        runtime_labels are the labels on FluentControl's RuntimeWorkspace now (None: not known). Labware added in an
+        earlier run can stay there, so a labware that is not on the base worktable but is on the RuntimeWorkspace is
+        removed before it is added again."""
         state = self.load()
         removes, adds, refills, stale = [], [], [], []
         for label in sorted(state["labware"]):
@@ -529,12 +536,13 @@ class DeckState:
                 if e.get("base"):
                     removes.append(label)  # not left at its base position either, where it is not
                 continue
-            if e.get("base"):
+            if e.get("base") or label in (runtime_labels or ()):
                 removes.append(label)
             adds.append(label)
             if refill:
                 refills.append(label)
         entries = state["labware"]
+        removes.sort()
         steps = [
             (f"RemoveLabware {label} (deck state, bookkeeping only)", remove_labware_xml(label)) for label in removes
         ]
@@ -610,11 +618,17 @@ class DeckState:
         state = self.load()
         entries = state["labware"]
         added = {m.strip() for _, xml in steps for m in re.findall(r"<LabwareLable>([^<]+)</LabwareLable>", xml)}
+        # the waste a statement drops tips or wash liquid into (FCA or MCA Thru Deck Waste Chute_1, ...)
+        waste = set(self.config.waste_labware) | {
+            m.strip().strip('"')
+            for _, xml in steps
+            for m in re.findall(r"<(?:DitiWaste|WashWasteName)>([^<]+)</(?:DitiWaste|WashWasteName)>", _unescape(xml))
+        }
         problems = []
         for _, xml in steps:
             removing = "RemoveLabwareDataV1" in xml
             for label in extract_references(_unescape(xml))["labware"]:
-                if label in added or label in session_labels or label.startswith("FCA Thru Deck Waste"):
+                if label in added or label in session_labels or label in waste:
                     continue
                 e = entries.get(label)
                 if e is not None:

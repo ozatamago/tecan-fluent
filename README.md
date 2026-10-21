@@ -183,7 +183,9 @@ cp config/bioshake.fluentpc.example.json config/bioshake.json       # a device s
   both Fluent PC examples, so they share it; empty or missing: no deck state, as before), `base_worktable` (the
   worktable the deck state describes; must be `fluent.definitions.workspace`, empty means that one), `handoff_sites`
   (positions other robots may use, e.g. `[{"location": "Nest7mm_Pos", "site": 1}]`; kept for the hand-over commands
-  to come) and `hands_off_max_minutes` (default and upper limit of `HandsOff.Begin`'s `MaxMinutes`, 30). Nothing
+  to come), `hands_off_max_minutes` (default and upper limit of `HandsOff.Begin`'s `MaxMinutes`, 30) and
+  `waste_labware` (labels the label check always accepts; the DiTi and wash waste a statement names, e.g.
+  `FCA Thru Deck Waste Chute_1` or `MCA Thru Deck Waste Chute_1` on a Fluent 480, are accepted anyway). Nothing
   instrument-specific is built in: the same settings serve a Fluent 480 with its own names.
 
 ### Starting
@@ -355,7 +357,11 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
   `MoveLabwareToBase`, `PutLidOn`); `PlateTransfer`'s positions are a view on it. Labware added only in the open run
   (`Labware.AddLabware`) is not recorded.
 - **Labels are checked**: with a deck state, a command that uses a labware that is neither on the base worktable nor
-  in the deck state (or one recorded as taken off) is refused before sending, naming the label. Without
+  in the deck state (or one recorded as taken off) is refused before sending, naming the label. "On the base
+  worktable" includes FluentControl's RuntimeWorkspace, which keeps labware added in earlier runs (e.g.
+  `96 Well Flat_Custom[001]`, `4 Well SBS Trough[001]`); its position there counts as the labware's base position.
+  A labware placed on the deck that is still on the RuntimeWorkspace from an earlier run is removed before it is
+  added again at run start. Without
   `deck.state_file` none of this applies and everything works as before.
 - **Tip racks**: a rack recorded "full" is registered at the next run start (a newly added rack is full to
   FluentControl). At its base position FluentControl then keeps its own count of used tips. Away from its base

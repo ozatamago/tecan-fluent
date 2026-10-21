@@ -50,6 +50,7 @@
     "state_file": "C:\\Users\\Tecan\\OFML\\state\\deck.json",
     "base_worktable": "",
     "handoff_sites": [],
-    "hands_off_max_minutes": 30.0
+    "hands_off_max_minutes": 30.0,
+    "waste_labware": []
   }
 }
