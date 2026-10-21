@@ -33,7 +33,12 @@ class Status(sila.Feature):
         """What this connector is doing now, e.g. "ODTC: SiLA-ODTC_ExecuteMethod ini95", or "another server: ..." while
         another server on the Fluent PC uses FluentControl. Empty when idle."""
         other = self.backend.other_server()
-        return self.backend.current_operation or (f"another server: {other}" if other else "")
+        # hands-off held by this server shows as itself ("hands-off by ..."); held by another, as "another server: ..."
+        return (
+            self.backend.current_operation
+            or self.backend.hands_off_text
+            or (f"another server: {other}" if other else "")
+        )
 
     @sila.UnobservableProperty(errors=[OdtcOperationFailed])
     async def get_fluent_control_state(self) -> str:
@@ -55,7 +60,7 @@ class Status(sila.Feature):
     async def get_ready(self) -> bool:
         """True when a command can start now (FluentControl idle, no dialog, neither this connector nor another server
         on the Fluent PC busy)."""
-        if self.backend.busy or self.backend.other_server():
+        if self.backend.busy or self.backend.hands_off_text or self.backend.other_server():
             return False
         try:
             state, dialogs = await self.backend.fluent_status()

@@ -70,12 +70,16 @@ class SharedLock:
             o = json.loads(self._owner_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return ""
+        if o.get("hands_off"):  # held for another robot working on the deck (hands_off.py)
+            h = o["hands_off"]
+            return f"hands-off by {h.get('who', '?')} ({h.get('reason', '?')}, since {h.get('since', '?')})"
         return f"{o.get('owner', '?')}: {o.get('what', '?')} (since {o.get('since', '?')})"
 
-    def acquire(self, what: str) -> None:
-        """Take the lock or raise BackendError naming the server that holds it. Does nothing if already held."""
+    def acquire(self, what: str, extra: dict | None = None) -> None:
+        """Take the lock or raise BackendError naming the server that holds it. Does nothing if already held.
+        extra is added to the owner file (e.g. {"hands_off": {...}})."""
         if self._file is not None:
-            self._write_owner(what)
+            self._write_owner(what, extra)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         f = open(self.path, "a+b")  # noqa: SIM115 - kept open while the lock is held
@@ -84,7 +88,7 @@ class SharedLock:
             other = self.holder() or "another server"
             raise BackendError(f"FluentControl is in use by another server on the Fluent PC ({other})")
         self._file = f
-        self._write_owner(what)
+        self._write_owner(what, extra)
 
     def release(self) -> None:
         if self._file is None:
@@ -107,12 +111,13 @@ class SharedLock:
                 return ""
         return self.holder() or "another server"
 
-    def _write_owner(self, what: str) -> None:
+    def _write_owner(self, what: str, extra: dict | None = None) -> None:
         info = {
             "owner": self.owner,
             "what": what,
             "pid": os.getpid(),
             "since": datetime.datetime.now().isoformat(timespec="seconds"),
+            **(extra or {}),
         }
         try:
             self._owner_file.write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
