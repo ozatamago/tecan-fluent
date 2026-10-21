@@ -31,7 +31,7 @@ def config_class(app: str):
 
 def test_every_example_belongs_to_an_app():
     listed = {name for names in EXAMPLES.values() for name in names}
-    assert {p.name for p in CONFIG.glob("*.json")} == listed
+    assert {p.name for p in CONFIG.glob("*.example.json")} == listed
 
 
 @pytest.mark.parametrize(("app", "name"), [(app, name) for app, names in EXAMPLES.items() for name in names])
