@@ -147,8 +147,15 @@ Where the implementation differs from or adds to the text above:
 - Writing over SSH is atomic on the Fluent PC side (copy to `<file>.tmp`, then `Move-Item -Force`); a change refuses
   if the version in the file changed since it was read (another server).
 - Tip racks: a "full" rack is registered at the next run start and then marked `registered_at`; from then on a rack
-  at its base position is left to FluentControl's own count. A rack away from its base position is added at every run
-  start (as all labware away from base), i.e. as a full rack each time.
+  at its base position is left to FluentControl's own count. A rack away from its base position is registered once
+  only (re-adding it would make it full again to FluentControl, and GetTips would go for tips that are gone): at
+  the next run start it becomes `"kind": "used"` (with `used_since`), is not added (a base-worktable rack is still
+  removed from its base position), and `check_labels` refuses every command that uses it ("tip rack <label> was
+  registered in an earlier run and FluentControl no longer knows which tips are left; replace it with a full rack
+  (Deck.PlaceTipRack Kind=full) or take it off (Deck.RemoveLabware)"). A rack recorded "as is" away from its base
+  position is never added and refused the same way. PlaceTipRack Kind=full (at the same position: refilled in place)
+  makes it usable again. The mark is made before the operation's labels are checked, so a command with a run of its
+  own is refused as well.
 - `MoveLabwareToBase` and `PutLidOn` of labware in the deck state that is not on the base worktable are refused
   (its base position is not known). `PutLidOn` records the lid back at its base position: it assumes the lid goes
   back onto the plate it belongs to on the base worktable.
@@ -165,8 +172,8 @@ keeps its timeout):
 - Is there a FluentControl statement that sets the next tip position or refills a rack? Not investigated on the
   device; until then a full rack is registered with RemoveLabware + AddLabware.
 - Does a rack registered with RemoveLabware + AddLabware count as full, and does FluentControl keep its count of used
-  tips for it in the following runs (which start from the worktable again)? For a rack away from its base position,
-  being added as full at every run start is wrong once tips were used.
+  tips for it in the following runs (which start from the worktable again)? Until this is known, a rack away from its
+  base position is usable only in the run that registered it.
 - What happens to a lid (`HasLid` is always False in AddLabware; the `lid` field is only recorded) when a plate with
   a lid is removed and added again?
 - Are all labels the existing commands use (tip racks, the DiTi waste, fingers, troughs) found on the base

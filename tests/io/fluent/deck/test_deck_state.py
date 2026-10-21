@@ -186,7 +186,8 @@ def test_contents_and_tip_racks(tmp_path):
     d.place_tip_rack("FCA_ 200ul SBS[002]", "FCA, 200ul SBS", "HotelMP_Pos", 4, "as is", "Franka")
     assert d.tip_racks() == [
         f"{RACK}: FCA, 200ul SBS at Nest7mm_Pos[2] (full since 2026-10-21T10:00:00, registered at the next run start)",
-        "FCA_ 200ul SBS[002]: FCA, 200ul SBS at HotelMP_Pos[4] (as is since 2026-10-21T10:00:00)",
+        "FCA_ 200ul SBS[002]: FCA, 200ul SBS at HotelMP_Pos[4] (as is since 2026-10-21T10:00:00, "
+        "not usable: replace it with a full rack (PlaceTipRack Kind=full) or take it off)",
     ]
 
 
@@ -369,3 +370,71 @@ def test_labels_neither_on_the_worktable_nor_in_the_deck_state_are_refused(tmp_p
     ]
     assert d.check_labels(steps, base)[0] == []
     assert d.check_labels([("move", transfer_xml("Session[001]", "Regrip_Pos", 1))], base, {"Session[001]"})[0] == []
+
+
+# ---- tip racks away from their base position
+RACK9 = "FCA_ 200ul SBS[009]"
+
+
+def _uses_rack(label: str = RACK9) -> list:
+    from unitelabs.tecan_fluent.io.fluent.gripper.statements import transfer_xml
+
+    return [("uses the rack", transfer_xml(label, "Regrip_Pos", 1))]
+
+
+def test_a_rack_away_from_its_base_is_added_as_full_only_once(tmp_path):
+    backend, d = _backend(tmp_path)
+    base = {PLATE, RACK}
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "full", "a person")
+    add = (f"AddLabware {RACK9} at HotelMP_Pos[4] (deck state, bookkeeping only)",)
+
+    # first run: registered as full, usable in that run
+    asyncio.run(backend.start_run())
+    assert d.entry(RACK9)["tips"]["registered_at"]
+    assert d.check_labels(_uses_rack(), base, set(backend.session_labware))[0] == []
+    asyncio.run(backend.end_run())
+
+    # second run: not added again (it would be full to FluentControl), marked used, and refused
+    assert [label for label, _ in d.registration()[0]] == []
+    asyncio.run(backend.start_run())
+    assert d.entry(RACK9)["tips"]["kind"] == "used" and RACK9 not in backend.session_labware
+    problems, _ = d.check_labels(_uses_rack(), base, set(backend.session_labware))
+    assert problems == [
+        f"tip rack {RACK9} was registered in an earlier run and FluentControl no longer knows which tips are left; "
+        "replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off (Deck.RemoveLabware)"
+    ]
+    assert "not usable" in d.tip_racks()[0] and d.tip_racks()[0].startswith(
+        f"{RACK9}: FCA, 200ul SBS at HotelMP_Pos[4] (used"
+    )
+    asyncio.run(backend.end_run())
+    assert [label for label, _ in d.registration()[0]] == []  # stays out until replaced
+
+    # a full rack put in again (refilled in place) is added at the next run start and usable
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "full", "a person")
+    assert tuple(label for label, _ in d.registration()[0]) == add
+    asyncio.run(backend.start_run())
+    assert d.check_labels(_uses_rack(), base, set(backend.session_labware))[0] == []
+    asyncio.run(backend.end_run())
+
+
+def test_a_command_with_a_run_of_its_own_refuses_a_used_rack_too(tmp_path):
+    backend, d = _backend(tmp_path)
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "full", "a person")
+    asyncio.run(backend.run_macro("SiLA-ODTC_OpenDoor"))  # registers the rack as full
+    assert d.entry(RACK9)["tips"]["kind"] == "full"
+    asyncio.run(backend.run_macro("SiLA-ODTC_CloseDoor"))  # the next run does not add it again
+    assert d.entry(RACK9)["tips"]["kind"] == "used"
+    assert "registered in an earlier run" in d.check_labels(_uses_rack(), {PLATE, RACK})[0][0]
+
+
+def test_a_rack_put_back_as_is_away_from_its_base_is_not_usable(tmp_path):
+    d = deck(tmp_path)
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "as is", "Franka")
+    assert d.registration()[0] == []
+    [problem] = d.check_labels(_uses_rack(), {PLATE, RACK})[0]
+    assert problem.startswith(f"tip rack {RACK9} was put back as is away from its base position")
+    # at its base position, "as is" keeps FluentControl's own count: nothing registered, nothing refused
+    d.remove(RACK)
+    d.place_tip_rack(RACK, "FCA, 200ul SBS", "Nest7mm_Pos", 2, "as is", "Franka")
+    assert d.registration()[0] == []
+    assert d.check_labels(_uses_rack(RACK), {PLATE, RACK})[0] == []

@@ -357,6 +357,13 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
 - **Labels are checked**: with a deck state, a command that uses a labware that is neither on the base worktable nor
   in the deck state (or one recorded as taken off) is refused before sending, naming the label. Without
   `deck.state_file` none of this applies and everything works as before.
+- **Tip racks**: a rack recorded "full" is registered at the next run start (a newly added rack is full to
+  FluentControl). At its base position FluentControl then keeps its own count of used tips. Away from its base
+  position a rack is registered once only: at the following run start it becomes "used", is not added again, and
+  commands that use it are refused ("tip rack ... was registered in an earlier run and FluentControl no longer knows
+  which tips are left; replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off
+  (Deck.RemoveLabware)"). A rack put back "as is" away from its base position is refused the same way. `TipRacks`
+  marks these racks as not usable.
 - Changes to the layout are refused while a run is open (FluentControl's run already has its layout) or while
   another server sends; they are allowed while hands-off is held, which is when the deck should be changed.
 - **Hands-off** is the shared lock held on behalf of `Who`: every server on the Fluent PC refuses FluentControl

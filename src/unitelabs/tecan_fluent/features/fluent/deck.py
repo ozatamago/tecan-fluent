@@ -73,7 +73,8 @@ class Deck(sila.Feature):
     @sila.UnobservableProperty(errors=[DeckCommandFailed])
     async def get_tip_racks(self) -> list[str]:
         """Every tip rack recorded with PlaceTipRack: tip type, position and recorded state ("full" racks are
-        registered at the next run start, after which FluentControl's own count of used tips is authoritative)."""
+        registered at the next run start, after which FluentControl's own count of used tips is authoritative; racks
+        away from their base position that are "used" or "as is" are marked not usable)."""
         if self.deck is None:
             return []
         return await self._call(self.deck.tip_racks)
@@ -159,8 +160,11 @@ class Deck(sila.Feature):
         already on the deck at that position counts as refilled in place.
 
         A "full" rack is registered at the next run start with RemoveLabware / AddLabware, so FluentControl sees a
-        full rack. Whether FluentControl keeps that across later runs is not confirmed on the instrument yet:
-        GetTips keeps its timeout.
+        full rack. At its base position FluentControl then keeps its own count of used tips. Away from its base
+        position a rack is registered once only: from the following run on it counts as used, and commands that use
+        it are refused until a full rack is recorded again or it is taken off; a rack put back "as is" away from its
+        base position is refused the same way (FluentControl cannot know which tips are left). Whether FluentControl
+        honours the registration is not confirmed on the instrument yet: GetTips keeps its timeout.
 
         Args:
           Label: Name of the rack, e.g. "FCA_ 200ul SBS[001]".

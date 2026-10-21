@@ -503,17 +503,31 @@ class DeckState:
         First RemoveLabware for every base-worktable labware that was moved or taken off (and racks refilled at their
         base position), then AddLabware for everything on the deck that FluentControl would not have where it is,
         each in label order. Removing everything first keeps a site free for a labware moved onto the base position
-        of another one. Nothing moves."""
+        of another one. Nothing moves.
+
+        A tip rack away from its base position is added only while it is recorded as full and not registered yet: a
+        newly added rack is full to FluentControl, so adding it again in a later run would make GetTips go for tips
+        that are gone. A rack registered in an earlier run is not added again but becomes "used" (stale, listed in
+        info["stale"]; mark_stale records it), and racks "used" or "as is" away from their base position are not
+        added; check_labels refuses commands that use them. Racks at their base position keep FluentControl's own
+        count."""
         state = self.load()
-        removes, adds, refills = [], [], []
+        removes, adds, refills, stale = [], [], [], []
         for label in sorted(state["labware"]):
             e = state["labware"][label]
-            refill = (e.get("tips") or {}).get("kind") == "full" and not e["tips"].get("registered_at")
+            tips = e.get("tips") or {}
+            refill = tips.get("kind") == "full" and not tips.get("registered_at")
             if e.get("location") is None:
                 if e.get("base"):
                     removes.append(label)
                 continue
             if _at_base(e) and not refill:
+                continue
+            if tips and not refill:  # a rack away from its base position whose tips FluentControl cannot know
+                if tips.get("kind") == "full":
+                    stale.append(label)
+                if e.get("base"):
+                    removes.append(label)  # not left at its base position either, where it is not
                 continue
             if e.get("base"):
                 removes.append(label)
@@ -538,8 +552,40 @@ class DeckState:
             "removed": removes,
             "added": {label: entries[label]["type"] for label in adds},
             "refilled": refills,
+            "stale": stale,
         }
         return steps, info
+
+    def mark_stale(self, labels: list[str]) -> None:
+        """Racks registered in an earlier run and away from their base position: tips "used" from now on (commands
+        that use them are refused until a full rack is recorded with PlaceTipRack, or they are taken off)."""
+        if not labels:
+            return
+
+        def fn(entries: dict) -> dict:
+            for label in labels:
+                tips = (entries.get(label) or {}).get("tips")
+                if tips and tips.get("kind") == "full":
+                    tips.update(kind="used", used_since=self._now())
+            return {"labels": labels}
+
+        self._change("TipRackUsed", {"labels": labels}, fn)
+
+    @staticmethod
+    def _unusable_rack(label: str, e: dict) -> str:
+        """Why a rack away from its base position cannot be used, or ""."""
+        tips = e.get("tips") or {}
+        if e.get("location") is None or _at_base(e) or tips.get("kind") not in ("used", "as is"):
+            return ""
+        fix = "replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off (Deck.RemoveLabware)"
+        if tips["kind"] == "used":
+            return (
+                f"tip rack {label} was registered in an earlier run and FluentControl no longer knows which tips "
+                f"are left; {fix}"
+            )
+        return f"tip rack {label} was put back as is away from its base position and FluentControl cannot know " + (
+            f"which tips are left; {fix}"
+        )
 
     def registered(self, info: dict) -> None:
         """After the registration was sent: racks registered as full count as registered (FluentControl's own count
@@ -577,6 +623,8 @@ class DeckState:
                             f"Labware '{label}' is recorded as taken off the deck (by {e.get('removed_by') or '?'}, "
                             f"{e.get('removed_at') or '?'})"
                         )
+                    elif not removing and self._unusable_rack(label, e):
+                        problems.append(self._unusable_rack(label, e))
                     continue
                 if label not in base_labels:
                     problems.append(
@@ -624,13 +672,15 @@ class DeckState:
             if not tips:
                 continue
             where = "taken off the deck" if e.get("location") is None else f"at {_position(e)}"
-            state = f"{tips['kind']} since {tips.get('since', '?')}"
+            state = f"{tips['kind']} since {tips.get('used_since') or tips.get('since', '?')}"
             if tips["kind"] == "full":
                 state += (
                     f", registered at run start {tips['registered_at']}"
                     if tips.get("registered_at")
                     else ", registered at the next run start"
                 )
+            if self._unusable_rack(label, e):
+                state += ", not usable: replace it with a full rack (PlaceTipRack Kind=full) or take it off"
             out.append(f"{label}: {e.get('type', '')} {where} ({state})")
         return out
 
