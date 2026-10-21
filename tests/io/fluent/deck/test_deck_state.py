@@ -5,6 +5,7 @@ import asyncio
 import datetime
 import json
 import os
+import pathlib
 
 import pytest
 
@@ -13,6 +14,7 @@ from unitelabs.tecan_fluent.io.fluent.gripper.labware_tracker import LabwareTrac
 from unitelabs.tecan_fluent.io.fluent.gripper.statements import add_labware_xml, remove_labware_xml
 from unitelabs.tecan_fluent.io.fluentcontrol.backend import BackendError, FluentBackendConfig, FluentControlBackend
 from unitelabs.tecan_fluent.io.fluentcontrol.definitions import DefinitionCheckFailed, DefinitionView
+from unitelabs.tecan_fluent.io.fluentcontrol.remote import long_path
 
 WORKTABLE = "WT_TEST"
 PLATE = "96 Well Flat_Custom[001]"
@@ -293,7 +295,7 @@ def _backend(tmp_path) -> tuple[FluentControlBackend, DeckState]:
 
 
 def _steps(record_dir) -> list[str]:
-    return sorted(p.name for p in (record_dir / "steps").iterdir())
+    return sorted(p.name for p in pathlib.Path(long_path(record_dir / "steps")).iterdir())
 
 
 def test_start_run_registers_the_deck_state_first_and_records_it(tmp_path):
@@ -313,7 +315,7 @@ def test_start_run_registers_the_deck_state_first_and_records_it(tmp_path):
     first, second = sorted(p for p in folder.iterdir() if p.is_dir())
     assert "Deck_registration_at_run_start" in first.name and "OpenDoor" in second.name
     # the exact statements, in order: remove what was moved, then add everything at its recorded position
-    assert [(first / "steps" / name).read_text() for name in _steps(first)] == [
+    assert [pathlib.Path(long_path(first / "steps" / name)).read_text() for name in _steps(first)] == [
         remove_labware_xml(PLATE),
         add_labware_xml("96 Well Flat_Custom", PLATE, "Regrip_Pos", 1),
         add_labware_xml("96 Well Skirted PCR_Custom", "Plate_A[001]", "HotelMP_Pos", 1),
@@ -323,12 +325,12 @@ def test_start_run_registers_the_deck_state_first_and_records_it(tmp_path):
         "02_AddLabware_96_Wel",
         "03_AddLabware_Plate_",
     ]
-    manifest = json.loads((first / "manifest.json").read_text())
+    manifest = json.loads(pathlib.Path(long_path(first / "manifest.json")).read_text())
     assert manifest["deck"]["version"] == 2 and manifest["deck"]["added"] == {
         PLATE: "96 Well Flat_Custom",
         "Plate_A[001]": "96 Well Skirted PCR_Custom",
     }
-    assert json.loads((first / "result.json").read_text())["status"] == "ok"
+    assert json.loads(pathlib.Path(long_path(first / "result.json")).read_text())["status"] == "ok"
 
 
 def test_a_command_with_a_run_of_its_own_registers_the_deck_state_too(tmp_path):
