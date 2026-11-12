@@ -266,20 +266,6 @@ def test_the_commands_in_a_dry_run():
                 "Water[001]", "A1", "Plate[001]", ["A1"], 50, "Water Free Single", "FCA, 200ul SBS", [1], 1, 1, status=S
             )
         await lh.drop_tips([1], status=S)
-        with pytest.raises(LiquidHandlingFailed, match="1000ul SBS\\[001\\]"):
-            await lh.distribute_reagent(
-                "Water[001]",
-                "A1",
-                "Plate[001]",
-                ["A1"],
-                50,
-                "Water Free Single",
-                "FCA, 1000ul SBS",
-                [1],
-                1,
-                1,
-                status=S,
-            )
         with pytest.raises(LiquidHandlingFailed, match="about 200 ul .* tip holds 170 ul"):
             await lh.distribute_reagent(
                 "Water[001]",

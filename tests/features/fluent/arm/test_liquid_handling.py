@@ -112,8 +112,6 @@ def test_a_water_transfer_and_the_refusals():
         await lc.add_labware("Plate[001]", "96 Well Flat_Custom", "Nest7mm_Pos", 2, status=S)
         with pytest.raises(LiquidHandlingFailed, match="have no tips"):
             await lh.aspirate("Water[001]", ["A1"], [50], "Water Free Single", [1], status=S)
-        with pytest.raises(LiquidHandlingFailed, match="rack \\[001\\] does not fit"):
-            await lh.get_tips("FCA, 1000ul SBS", [1], "", status=S)
         await lh.get_tips("FCA, 200ul SBS", [1], "", status=S)
         with pytest.raises(LiquidHandlingFailed, match="already have tips"):
             await lh.get_tips("FCA, 200ul SBS", [1], "", status=S)

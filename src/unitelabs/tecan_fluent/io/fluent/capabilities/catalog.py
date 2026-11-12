@@ -72,8 +72,6 @@ CONSTRAINTS = [
     {"id": "short-tips-low-nest", "category": "pipetting", "basis": "observed",
      "rule": "10 uL tips do not reach the bottom of a PCR plate on a 7 mm nest (Nest7mm_Pos); use 50 uL or longer tips "
              "there."},
-    {"id": "tip-rack-1000-001", "category": "pipetting", "basis": "observed",
-     "rule": "The 1000 uL tips of rack FCA_ 1000ul SBS[001] do not fit; take 1000 uL tips from FCA_ 1000ul SBS[002]."},
     {"id": "pipetting-places", "category": "pipetting", "basis": "inference",
      "rule": "Pipette only at places whose carriers allow the FCA arm (Places: Pipetting=true): deck nests, CPLC, "
              "BioShake and the magnet, not the hotel, ODTC, reader, incubators or centrifuge."},

@@ -17,7 +17,6 @@ instrument):
 - a volume above what the tip can hold (MaxNettoVolumeForTransferPhase of the tip definition)
 - a liquid class without settings for the mounted tip type on the Air FCA
 - 10 ul tips on a PCR plate on the 7 mm nest (they did not reach the bottom on 2026-10-09)
-- 1000 ul tips from rack FCA_ 1000ul SBS[001] (the tips did not fit and fell off in August 2026)
 
 The record of each command gets the liquid class settings for the mounted tip type (speeds, air gaps, liquid level
 detection, positions) under "liquid_class_settings".
@@ -49,9 +48,6 @@ TIP_TYPES = (
     "FCA, 1000ul Filtered SBS",
 )
 """Tip types used by the 01-07 GUI scripts (50ul SBS only by the worklists of 02 and 07)."""
-BAD_RACKS = {
-    "FCA_ 1000ul SBS[001]": "the tips in this rack do not fit and fell off (August 2026); use FCA_ 1000ul SBS[002]"
-}
 
 
 DETECTED_VOLUMES_PS1 = r"""
@@ -284,10 +280,6 @@ class LiquidHandling(sila.Feature):
         channels = self._channels(channels)
         if tip_type not in TIP_TYPES:
             raise LiquidHandlingFailed(f"TipType must be one of {', '.join(TIP_TYPES)}")
-        if rack in BAD_RACKS:
-            raise LiquidHandlingFailed(f"{rack}: {BAD_RACKS[rack]}")
-        if tip_type.startswith("FCA, 1000ul SBS") and not rack:
-            raise LiquidHandlingFailed("Name the rack for 1000 ul tips (FCA_ 1000ul SBS[002]); rack [001] does not fit")
         mounted = sorted(set(channels) & set(self.backend.tips))
         if mounted:
             raise LiquidHandlingFailed(f"Channels {mounted} already have tips; drop them first")
@@ -497,11 +489,6 @@ class LiquidHandling(sila.Feature):
         dispenses: dispenses per aspiration; the liquid in the tip then is checked against the tip size."""
         if tip_type not in TIP_TYPES:
             raise LiquidHandlingFailed(f"TipType must be one of {', '.join(TIP_TYPES)}")
-        if tip_type.startswith("FCA, 1000ul SBS"):
-            raise LiquidHandlingFailed(
-                "FluentControl picks the rack itself here and may take FCA_ 1000ul SBS[001], whose "
-                "tips do not fit (August 2026); use 1000 ul Filtered tips or GetTips with a rack"
-            )
         if self.backend.tips:
             raise LiquidHandlingFailed(
                 f"Channels {sorted(self.backend.tips)} have tips; this command takes and drops "
