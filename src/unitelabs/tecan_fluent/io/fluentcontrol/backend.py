@@ -90,6 +90,8 @@ class FluentBackendConfig(Config):
     """SSH target for reading temperatures from the FluentControl log (must allow key authentication)."""
     sensor_script: str = r"C:\Users\Tecan\OFML\tools\odtc_last_sensor_values.ps1"
     """Location of the reader script (scripts/windows/odtc_last_sensor_values.ps1) on the Fluent PC."""
+    cplc_driver_ini: str = r"C:\ProgramData\Tecan\VisionX\inhecoMTC.ini"
+    """Active INHECO legacy driver configuration; read-only prerequisite check for ReadTemperature."""
     channel_timeout_s: float = 300.0
     finish_timeout_s: float = 180.0
     api_channel: str = "ofml"
@@ -537,6 +539,13 @@ class FluentControlBackend:
         """Send ReadActualTemperature and read the result from the FluentControl log. Values are in degC."""
         async with self._exclusive("ODTC: read temperature"):
             return await asyncio.to_thread(self._guarded, self._read_sensor_values, report)
+
+    async def read_cplc_temperature(self, slot: int, report=lambda _: None) -> dict:
+        """Read the driver temperature in the current run, sharing the normal Fluent operation lock."""
+        from ..cplc.temperature import read_temperature
+
+        async with self._exclusive(f"CPLC: read temperature slot {slot}"):
+            return await asyncio.to_thread(self._guarded, read_temperature, self, slot, report)
 
     def _guarded(self, fn, *args):
         """On an unexpected exception from a backend call, drop the connection (rebuilt next time); raise
