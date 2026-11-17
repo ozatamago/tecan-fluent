@@ -21,3 +21,10 @@ def mtc_set_temperature_xml(slot: int, enabled: bool, temperature: float) -> str
         "inhecoMTC_SetTemperature",
         f"{int(slot)},{'True' if enabled else 'False'},{_num(temperature, 1)},0",
     )
+
+
+def mtc_read_temperature_xml(slot: int) -> str:
+    """Read one slot with an empty EVOware output variable; do not set or enable temperature."""
+    if type(slot) is not int or slot not in (1, 2, 3):
+        raise ValueError("CPLC Slot must be 1, 2 or 3")
+    return legacy_macro_xml("inhecoMTC", "inhecoMTC_GetTemperature", f"{slot},,0")
