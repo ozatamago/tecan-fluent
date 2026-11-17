@@ -40,6 +40,10 @@ Things that FluentControl does not return through its API are read on the Fluent
 connector runs there): the ODTC temperatures from the driver log, Magellan's ASC result files, FluentControl's own log
 (what a Smart Command or worklist expanded into), and the deck cameras.
 
+Run startup waits for native `RunModeRunning` before inspecting the `ofml` execution channel. The lower
+FluentControl connector also needs to discard cached channels between runs; the versioned patch and its tests are
+in [patches/tecan-fluentcontrol](patches/tecan-fluentcontrol/README.md).
+
 ### Devices and servers
 
 The combined server "Tecan Fluent 780 (All devices)" (since 2026-10-15) is the one to use. It puts all Features on a

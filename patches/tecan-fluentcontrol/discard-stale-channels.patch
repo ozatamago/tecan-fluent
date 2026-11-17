@@ -1,0 +1,24 @@
+--- a/src/unitelabs/tecan_fluentcontrol/io/fluentcontrol_protocol.py
++++ b/src/unitelabs/tecan_fluentcontrol/io/fluentcontrol_protocol.py
+@@ -474,6 +474,12 @@
+         if self.runtime is None:
+             raise RuntimeUnavailable
+ 
++        state = await self.get_state()
++        if state not in [StateMachineStates.EditMode, StateMachineStates.RunModeRunFinished]:
++            raise InvalidState(description="PrepareMethod requires an idle native runtime")
++        # Invalidate locally without calling any method on an obsolete COM proxy.
++        self._execution_channels.clear()
++
+         with contextlib.suppress(Exception):
+             root = pathlib.WindowsPath("c:/", "ProgramData", "Tecan", "VisionX", "Journaling")
+             shutil.rmtree(root / "ToDelete", ignore_errors=False)
+@@ -1009,6 +1015,8 @@
+         """
+ 
+         self.logger.info("> [State Changed] %s -> %s", StateMachineStates(old).name, StateMachineStates(current).name)
++        if StateMachineStates(current) in [StateMachineStates.EditMode, StateMachineStates.RunModeRunFinished]:
++            self._execution_channels.clear()
+         self.states.update(StateMachineStates(current))
+ 
+     def _on_error(self, message: str) -> None:
