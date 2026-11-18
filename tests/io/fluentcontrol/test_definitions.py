@@ -393,3 +393,39 @@ def test_the_waste_a_statement_names_is_accepted(tmp_path):
     assert deck.check_labels([("x", "<Object><LabwareName>Other Waste[001]</LabwareName></Object>")], set())[0] == []
     [problem] = deck.check_labels([("x", "<Object><LabwareName>Elsewhere[001]</LabwareName></Object>")], set())[0]
     assert "Elsewhere[001]" in problem
+
+
+def test_run_base_labels_reads_the_worktable_written_for_this_run_only(pc):
+    trough = (
+        "<ConnectedComponent><CarrierOrLabwareTemplateGUID>tip200</CarrierOrLabwareTemplateGUID>"
+        "<LabwareName><a:KeyValueOfstringstring><a:Key>default</a:Key><a:Value>Trough[001]</a:Value>"
+        "</a:KeyValueOfstringstring></LabwareName></ConnectedComponent>"
+    )
+    pc.files[r"SystemSpecific\Worktable\Workspaces\recovery.xwsp"] = vx(
+        "MethodRecoveryRuntimeBaseWorkspaceName",
+        f'<Workspace xmlns="{C}" xmlns:a="{A}"><Frame><Arrangements>'
+        f"<Arrangement><Sites>{site('s-nest')}{site('s-nest', trough)}</Sites></Arrangement>"
+        "</Arrangements></Frame></Workspace>",
+    ).encode()
+    preflight = Preflight(DefinitionsConfig(workspace="WT_TEST"), dry_run=False, pc=pc, background=False)
+    index = pc.index
+
+    def index_with_ticks(ticks):
+        def f():
+            out = index()
+            out[r"SystemSpecific\Worktable\Workspaces\recovery.xwsp"]["ticks"] = str(ticks)
+            return out
+
+        return f
+
+    pc.index = index_with_ticks(1000)
+    assert preflight.run_base_labels(900) == {"Trough[001]"}
+    # written before this run started: from an earlier run, not known for this one
+    assert preflight.run_base_labels(1001) is None
+
+    # not readable: not known
+    def broken():
+        raise DefinitionCheckFailed("no SSH")
+
+    pc.index = broken
+    assert preflight.run_base_labels(0) is None

@@ -92,6 +92,10 @@ class DefinitionsConfig(Config):
     """The worktable FluentControl actually runs on (it starts from the method's worktable and keeps labware added in
     earlier runs, e.g. 4 Well SBS Trough[001] at Nest7mm_Pos[5]). Read for the labware already registered; it changes
     with every run, so it is recorded but not compared with the baseline."""
+    run_base_workspace: str = "MethodRecoveryRuntimeBaseWorkspaceName"
+    """The worktable FluentControl writes when a run starts and runs on. After a run was aborted it is the recovery
+    state, not the method's worktable: on 2026-11-18 it kept the tip racks the aborted run had removed and moved, so a
+    RemoveLabware of a rack sent at the next run start failed ("does not exist") and ended the run."""
     ssh_target: str = "Tecan@10.5.1.156"
     remote_dir: str = r"C:\Users\Tecan\OFML"
     """Folder on the Fluent PC that holds the definition index, the baseline and the records."""
@@ -583,6 +587,37 @@ class Preflight:
         try:
             return set(self.runtime_labware(self.pc.index()))
         except DefinitionCheckFailed:
+            return None
+
+    def run_base_labels(self, since_ticks: int) -> set | None:
+        """Labels on the worktable the open run started from (run_base_workspace, written by FluentControl when the
+        run started, i.e. at or after since_ticks, .NET ticks UTC), or None when it is not known (not written for this
+        run, cannot be read, or checks are off)."""
+        if not self.config.enabled:
+            return None
+        try:
+            index = self.pc.index()
+            hits = sorted(
+                p
+                for p, e in index.items()
+                if p.lower().endswith(".xwsp")
+                and e.get("name") == self.config.run_base_workspace
+                and int(e.get("ticks") or 0) >= since_ticks
+            )
+            if not hits:
+                return None
+            sites = {
+                pathlib.PureWindowsPath(p).stem: e.get("location", "")
+                for p, e in index.items()
+                if p.lower().endswith(".xsit")
+            }
+            comps = {
+                pathlib.PureWindowsPath(p).stem: e.get("name", "")
+                for p, e in index.items()
+                if p.lower().endswith(".xcmp")
+            }
+            return set(workspace_labware(self.pc.read(hits[-1]), sites, comps))
+        except (DefinitionCheckFailed, ValueError):
             return None
 
     def begin(

@@ -24,7 +24,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import datetime
 import logging
+import re
 import time
 
 from unitelabs.cdk.config import Config
@@ -39,6 +41,14 @@ logger = logging.getLogger(__name__)
 API_HOST_METHOD = "OFML_ApiHost"
 IDLE_STATES = {"EditMode", "RunModeRunFinished"}
 STOP_STATES = {"RunModePaused", "RunModeStopOnError", "Unknown"}
+RUN_BASE_MARGIN_TICKS = 30 * 10_000_000
+"""How much earlier than PrepareMethod a worktable written for the run is accepted (clock differences, 30 s)."""
+
+
+def _dotnet_ticks_now() -> int:
+    """Now as .NET ticks (100 ns since 0001-01-01 UTC), the unit of the definition index (LastWriteTimeUtc.Ticks)."""
+    delta = datetime.datetime.now(datetime.UTC) - datetime.datetime(1, 1, 1, tzinfo=datetime.UTC)
+    return (delta.days * 86_400 + delta.seconds) * 10_000_000 + delta.microseconds * 10
 
 
 def discover_port(server_uuid: str, timeout_s: float = 8.0) -> int | None:
@@ -123,6 +133,9 @@ class FluentControlBackend:
         """DeckState registered at the start of every run (set by the server with attach_deck; None means none)."""
         self.hands_off = None
         """HandsOff of this server (set by the server): while it is held, every operation is refused."""
+        self._run_opened_ticks = 0
+        """When the last FluentControl run was started (.NET ticks UTC, a little early), to find the worktable it
+        started from (Preflight.run_base_labels)."""
 
     def attach_deck(self, deck) -> None:
         """Register this deck state at the start of every run, and refuse labware labels it does not know."""
@@ -280,11 +293,34 @@ class FluentControlBackend:
             raise BackendError(f"Registering the deck state was refused: {exc}") from None
         return [steps, record, info, False]
 
+    def _without_absent_removals(self, steps: list[tuple[str, str]], info: dict) -> list[tuple[str, str]]:
+        """Drop the RemoveLabware of labware that is not on the worktable the open run started from.
+
+        After an aborted run FluentControl starts the next runs from its recovery state, which can lack labware of
+        the method's worktable (2026-11-18: tip racks the aborted run had removed). A RemoveLabware of such labware
+        fails with "does not exist" and ends the run, so it is not sent. Unknown worktable: everything is sent."""
+        present = self.preflight.run_base_labels(self._run_opened_ticks)
+        if present is None:
+            return steps
+        kept, absent = [], []
+        for label, xml in steps:
+            m = re.search(r"<LabwareName>([^<]+)</LabwareName>", xml) if "RemoveLabwareDataV1" in xml else None
+            if m and m.group(1).strip() not in present:
+                absent.append(m.group(1).strip())
+                continue
+            kept.append((label, xml))
+        if absent:
+            logger.warning("Not removed at run start, already absent from the run's worktable: %s", absent)
+            info["already_absent"] = absent
+        return kept
+
     def _deck_send(self, deck: list, report) -> None:
         """Send the deck registration (only logged in a dry run) and finish its record."""
         steps, record, info, _ = deck
         deck[3] = True
         try:
+            if not self.config.dry_run:
+                steps = self._without_absent_removals(steps, info)
             if self.config.dry_run:
                 for label, xml in steps:
                     logger.info("dry-run: would have sent %s\n%s", label, xml)
@@ -295,7 +331,10 @@ class FluentControlBackend:
         except Exception as exc:
             record.finish({"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
             raise BackendError(f"Registering the deck state at the start of the run failed: {exc}") from None
-        record.finish({"status": "ok", "seconds": durations, "deck_version": info["version"]})
+        result = {"status": "ok", "seconds": durations, "deck_version": info["version"]}
+        if info.get("already_absent"):
+            result["not_removed_already_absent"] = info["already_absent"]
+        record.finish(result)
         if self._session:  # registered with AddLabware: known in this run like labware added with Labware.AddLabware
             self.session_labware.update(info["added"])
         try:
@@ -326,6 +365,7 @@ class FluentControlBackend:
             raise BackendError(f"Not starting because FluentControl has open dialogs: {' / '.join(dialogs)}")
 
         report("PrepareMethod")
+        self._run_opened_ticks = _dotnet_ticks_now() - RUN_BASE_MARGIN_TICKS
         c.RuntimeController.PrepareMethod(API_HOST_METHOD)
         c.RuntimeController.RunMethod()
         deadline = time.monotonic() + self.config.channel_timeout_s
