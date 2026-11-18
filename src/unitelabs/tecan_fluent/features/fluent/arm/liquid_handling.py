@@ -20,10 +20,18 @@ instrument):
 
 The record of each command gets the liquid class settings for the mounted tip type (speeds, air gaps, liquid level
 detection, positions) under "liquid_class_settings".
+
+SetNextTipPosition sends FluentControl's "Set Available Tips (Worktable)" in the open run. FluentControl uses the tips
+of a rack column-wise (A1, B1, ..., H1, A2, ...) and registers every rack as full at each run start, so the setting
+holds for the open run only; racks recorded in the deck state with the well of their next tip (Deck.PlaceTipRack,
+Deck.SetTipRackNextWell) get it at every run start. GetTips, the Smart Commands and worklists read from FluentControl's
+log which tips they took from such racks and move the recorded next tip on (_TipFollower).
 """
 
 import asyncio
+import logging
 import re
+import time
 
 from unitelabs.cdk import sila
 
@@ -33,21 +41,27 @@ from ....io.fluent.arm.statements import (
     get_tips_xml,
     move_arm_xml,
     pipetting_xml,
+    set_next_tip_position_xml,
     well_index,
 )
 from ....io.fluentcontrol.backend import BackendError, FluentControlBackend
 from ....io.fluentcontrol.definitions import DefinitionCheckFailed, _unescape, liquid_class_settings, tip_values
 from ....io.fluentcontrol.progress import with_progress
 
+logger = logging.getLogger(__name__)
+
 TIP_TYPES = (
     "FCA, 10ul SBS",
     "FCA, 50ul SBS",
+    "FCA, 50ul Filtered SBS",
     "FCA, 200ul SBS",
     "FCA, 200ul Filtered SBS",
     "FCA, 1000ul SBS",
     "FCA, 1000ul Filtered SBS",
 )
-"""Tip types used by the 01-07 GUI scripts (50ul SBS only by the worklists of 02 and 07)."""
+"""Tip types used by the 01-07 GUI scripts (50ul SBS by the worklists of 02 and 07 and the color-water protocol),
+plus FCA, 50ul Filtered SBS, defined in FluentControl like the others. The tip group, capacity and liquid class check
+come from each type's definition (.xcmp), so nothing else is keyed by the type."""
 
 
 DETECTED_VOLUMES_PS1 = r"""
@@ -64,6 +78,71 @@ FILTER_RESULTS_PS1 = DETECTED_VOLUMES_PS1.replace(
     "Message=\"channel (\\d+): detected volume ([0-9.]+) ul')) {", 'Message="(Channel \\d+ : Filter [^"]*)\')) {'
 ).replace("{ $m.Groups[2].Value + ' ' + $m.Groups[3].Value }", "{ $m.Groups[2].Value }")
 """The same for the verdicts of the inline filter check ("Channel 1 : Filter OK (passed) (...)", 2026-10-16)."""
+
+LOG_TRIES = 5
+"""How often the log is read (2 s apart) for the tips a command took before they count as unknown (the log write can
+lag)."""
+
+
+class _TipFollower:
+    """Moves the next tip of the deck state's tracked racks (partial racks, and full racks away from their base
+    position once registered) on after a command took tips, from FluentControl's log (fc_log.tips_taken). When a
+    command that succeeded shows no Get Tips in the log, the candidate racks count as "used" (unknown). After a
+    failed command only what the log shows is recorded."""
+
+    def __init__(self, deck, pc, candidates: list[str], since: str, source: str):
+        self.deck, self.pc, self.candidates, self.since, self.source = deck, pc, candidates, since, source
+        self.done = False
+
+    def read(self, want_tips: bool = True) -> str | None:
+        from ....io.fluentcontrol.fc_log import LOG_PS1, tips_taken
+
+        if not self.since:
+            return None
+        text = None
+        for attempt in range(LOG_TRIES if want_tips else 1):
+            if attempt:
+                time.sleep(2)
+            try:
+                text = self.pc.run_ps(LOG_PS1.replace("__SINCE__", self.since), 180).decode(
+                    "utf-8-sig", errors="replace"
+                )
+            except Exception as exc:  # noqa: BLE001 - only the tip tracking suffers
+                logger.warning("Could not read FluentControl's log for the tips taken: %s", exc)
+                return None
+            if tips_taken(text):
+                break
+        return text
+
+    def after(self, text: str | None, ok: bool = True) -> dict:
+        """Record what the log text (None: could not be read) says was taken. Returns the record entry."""
+        from ....io.fluentcontrol.fc_log import tips_taken
+
+        if self.done:
+            return {}
+        self.done = True
+        taken = tips_taken(text) if text else {}
+        try:
+            if any(taken.get(label) for label in self.candidates):
+                version = self.deck.tips_taken(taken, self.candidates, self.source)
+                return {"tip_tracking": {"racks": self.candidates, "taken": taken, "deck_version": version}}
+            if ok and not taken:
+                reason = (
+                    f"{self.source}: FluentControl's log "
+                    + ("could not be read" if text is None else "shows no Get Tips")
+                    + ", so the tips taken are unknown"
+                )
+                version = self.deck.tips_unknown(self.candidates, reason)
+                logger.warning("%s; marked used: %s", reason, self.candidates)
+                return {"tip_tracking": {"racks": self.candidates, "unknown": reason, "deck_version": version}}
+        except Exception as exc:  # noqa: BLE001 - FluentControl did the command; only the note is missing
+            logger.warning("Could not note the tips taken: %s", exc)
+            return {"tip_tracking_error": f"{type(exc).__name__}: {exc}"}
+        return {"tip_tracking": {"racks": self.candidates, "taken": taken}}
+
+    def after_failure(self) -> None:
+        if not self.done:
+            self.after(self.read(want_tips=False), ok=False)
 
 
 def _evaluate(formula: str, volume: float) -> float | None:
@@ -224,25 +303,50 @@ class LiquidHandling(sila.Feature):
             "worktable; add it with Labware.AddLabware"
         )
 
-    async def _send(self, label: str, xml: str, status: sila.Status, extra: dict | None = None, post=None) -> None:
+    async def _send(
+        self, label: str, xml: str, status: sila.Status, extra: dict | None = None, post=None, tips=None
+    ) -> None:
         try:
             await with_progress(
                 status, 1, lambda report: self.backend.run_steps([(label, xml)], report, label, extra, post)
             )
         except BackendError as exc:
+            if tips is not None:
+                await asyncio.to_thread(tips.after_failure)
             raise LiquidHandlingFailed(str(exc)) from None
 
-    # ---- what FluentControl expanded a Smart Command or worklist into (read from its log, see fc_log.py)
-    def _expansion_reader(self):
-        """(post, result): post() reads the log after the commands ran and returns the record entry; result["steps"]
-        then holds the readable lines for the SiLA response."""
-        from ....io.fluentcontrol.fc_log import LOG_PS1, describe, expanded_steps
+    # ---- the next tip of the racks the deck state follows
+    def _tip_follower(self, tip_type: str, rack: str, source: str) -> "_TipFollower | None":
+        """A follower for the tracked racks this command may take tips from (the named rack, or every tracked rack of
+        the tip type), or None (none tracked, no deck state, or a dry run)."""
+        deck = self.backend.deck
+        if deck is None or self.backend.config.dry_run:
+            return None
+        try:
+            tracked = deck.tracked_racks("" if rack else tip_type)
+        except BackendError as exc:
+            logger.warning("Tip tracking skipped, the deck state cannot be read: %s", exc)
+            return None
+        candidates = ([rack] if rack in tracked else []) if rack else tracked
+        if not candidates:
+            return None
+        pc = self.pc or self.backend.preflight.pc
+        return _TipFollower(deck, pc, candidates, self._pc_time(pc), source)
 
-        result: dict = {"steps": []}
+    # ---- what FluentControl expanded a Smart Command or worklist into (read from its log, see fc_log.py)
+    def _expansion_reader(self, tip_type: str = "", source: str = ""):
+        """(post, result): post() reads the log after the commands ran and returns the record entry; result["steps"]
+        then holds the readable lines for the SiLA response. result["tips"] is the _TipFollower of the tracked racks
+        of tip_type (None if none), whose after_failure the caller runs when the command fails."""
+        from ....io.fluentcontrol.fc_log import LOG_PS1, describe, expanded_steps, tips_taken
+
+        result: dict = {"steps": [], "tips": None}
         if self.backend.config.dry_run:
             return None, result
         pc = self.pc or self.backend.preflight.pc
         since = self._pc_time(pc)
+        follower = self._tip_follower(tip_type, "", source) if tip_type else None
+        result["tips"] = follower
         rows_cache: dict = {}
 
         def rows_of(labware: str):
@@ -255,11 +359,17 @@ class LiquidHandling(sila.Feature):
 
         def post() -> dict:
             if not since:
-                return {"fluentcontrol_steps_error": "the Fluent PC time could not be read"}
+                out = {"fluentcontrol_steps_error": "the Fluent PC time could not be read"}
+                return {**out, **(follower.after(follower.read()) if follower is not None else {})}
             text = pc.run_ps(LOG_PS1.replace("__SINCE__", since), 180).decode("utf-8-sig", errors="replace")
+            if follower is not None and not tips_taken(text):
+                text = follower.read() or text  # the log write can lag
             steps = expanded_steps(text)
             result["steps"] = describe(steps, rows_of)
-            return {"fluentcontrol_steps": steps, "fluentcontrol_steps_text": result["steps"]}
+            out = {"fluentcontrol_steps": steps, "fluentcontrol_steps_text": result["steps"]}
+            if follower is not None:
+                out.update(follower.after(text))
+            return out
 
         return post, result
 
@@ -267,11 +377,12 @@ class LiquidHandling(sila.Feature):
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
     async def get_tips(self, tip_type: str, channels: list[int], rack: str, *, status: sila.Status) -> None:
         """
-        Pick up disposable tips on the given channels (FluentControl takes the next unused tips). MOVES the arm.
+        Pick up disposable tips on the given channels (FluentControl takes the next unused tips, column-wise: A1, B1,
+        ..., H1, A2, ...; SetNextTipPosition chooses where it starts). MOVES the arm.
 
         Args:
-          TipType: "FCA, 10ul SBS", "FCA, 200ul SBS", "FCA, 200ul Filtered SBS", "FCA, 1000ul SBS" or
-            "FCA, 1000ul Filtered SBS".
+          TipType: "FCA, 10ul SBS", "FCA, 50ul SBS", "FCA, 50ul Filtered SBS", "FCA, 200ul SBS",
+            "FCA, 200ul Filtered SBS", "FCA, 1000ul SBS" or "FCA, 1000ul Filtered SBS".
           Channels: Channels 1-8 that get a tip, e.g. [1].
           Rack: Rack to take the tips from, e.g. "FCA_ 1000ul SBS[002]", or empty to let FluentControl choose.
         """
@@ -287,11 +398,15 @@ class LiquidHandling(sila.Feature):
             values = tip_values(self._definition(tip_type, ".xcmp"))
         except DefinitionCheckFailed as exc:
             raise LiquidHandlingFailed(str(exc)) from None
+        label = f"GetTips {tip_type} ch{channels}" + (f" from {rack}" if rack else "")
+        tips = await asyncio.to_thread(self._tip_follower, tip_type, rack, label)
         await self._send(
-            f"GetTips {tip_type} ch{channels}" + (f" from {rack}" if rack else ""),
+            label,
             get_tips_xml(tip_type, channels, rack),
             status,
             {"tip": {"type": tip_type, **values}},
+            (lambda: tips.after(tips.read())) if tips is not None else None,
+            tips,
         )
         for c in channels:
             self.backend.tips[c] = {
@@ -437,6 +552,40 @@ class LiquidHandling(sila.Feature):
         if not 1 <= cycles <= 20:
             raise LiquidHandlingFailed("Cycles must be 1 to 20")
         await self._pipette("Mix", labware, wells, volumes, liquid_class, channels, status, cycles)
+
+    @sila.ObservableCommand(errors=[LiquidHandlingFailed])
+    async def set_next_tip_position(self, rack: str, well: str, *, status: sila.Status) -> None:
+        """
+        Set where the next GetTips takes tips from a rack (FluentControl's "Set Available Tips (Worktable)"). Does not
+        move the arm. Only inside a run opened with RunControl.StartRun.
+
+        FluentControl uses the tips of a rack column-wise (A1, B1, ..., H1, A2, ...): setting C1 marks A1 and B1 as
+        used. The setting holds for the open run only, because every run start registers the racks as full again;
+        to keep it across runs record it in the deck state (Deck.SetTipRackNextWell or Deck.PlaceTipRack with the
+        well as Kind), which sends it at every run start. For a rack the deck state already follows, the recorded
+        next tip is set to this well too. FluentControl refuses a rack that is not on the run's worktable ("Could
+        not find labware '...' on worktable.").
+
+        Args:
+          Rack: Label of the tip rack, e.g. "FCA_ 1000ul SBS[002]".
+          Well: Well of the next tip, e.g. "C1".
+        """
+        self._need_run()
+        if not rack.strip():
+            raise LiquidHandlingFailed("Name the rack, e.g. FCA_ 1000ul SBS[002]")
+        try:
+            xml = set_next_tip_position_xml(rack, well)  # every FCA SBS rack holds 8 x 12 tips
+        except BackendError as exc:
+            raise LiquidHandlingFailed(str(exc)) from None
+        name = well.strip().upper()
+        await self._send(f"SetNextTipPosition {rack} {name}", xml, status)
+        deck = self.backend.deck
+        if deck is not None:
+            try:
+                if rack in await asyncio.to_thread(deck.tracked_racks):
+                    await asyncio.to_thread(deck.set_tip_rack_next_well, rack, name, "SetNextTipPosition")
+            except BackendError as exc:  # FluentControl has the setting; only the note is missing
+                logger.warning("Could not note the next tip of %s in the deck state: %s", rack, exc)
 
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
     async def drop_tips(self, channels: list[int], *, status: sila.Status) -> None:
@@ -741,7 +890,7 @@ class LiquidHandling(sila.Feature):
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra["labware_pictures"] = {source: source_geo, target: target_geo}
-        post, result = self._expansion_reader()
+        post, result = self._expansion_reader(tip_type, "ReagentDistribution")
         await self._send(
             f"ReagentDistribution {volume:g} ul {source} {source_well} -> {target} "
             f"{len(target_wells)} wells ({liquid_class}, {tip_type})",
@@ -749,6 +898,7 @@ class LiquidHandling(sila.Feature):
             status,
             extra,
             post,
+            result["tips"],
         )
         return result["steps"]
 
@@ -809,7 +959,7 @@ class LiquidHandling(sila.Feature):
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra["labware_pictures"] = {source: source_geo, target: target_geo}
-        post, result = self._expansion_reader()
+        post, result = self._expansion_reader(tip_type, "SampleTransfer")
         await self._send(
             f"SampleTransfer {volume:g} ul {source} -> {target} {len(source_wells)} samples "
             f"({liquid_class}, {tip_type})",
@@ -817,6 +967,7 @@ class LiquidHandling(sila.Feature):
             status,
             extra,
             post,
+            result["tips"],
         )
         return result["steps"]
 
@@ -894,13 +1045,14 @@ class LiquidHandling(sila.Feature):
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra.update({"volume_file": path, "volume_file_text": text})
-        post, result = self._expansion_reader()
+        post, result = self._expansion_reader(tip_type, "TransferIndividualVolumes")
         await self._send(
             f"TransferIndividualVolumes {source} -> {target} {len(volumes)} transfers ({liquid_class}, {tip_type})",
             xml,
             status,
             extra,
             post,
+            result["tips"],
         )
         return path, result["steps"]
 
@@ -965,7 +1117,7 @@ class LiquidHandling(sila.Feature):
         except (BackendError, DefinitionCheckFailed) as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         extra.update({"worklist_file": csv_path, "worklist_text": text, "worklist_labware": types})
-        post, result = self._expansion_reader()
+        post, result = self._expansion_reader(tip_type, "Worklist")
         try:
             await with_progress(
                 status,
@@ -975,6 +1127,8 @@ class LiquidHandling(sila.Feature):
                 ),
             )
         except BackendError as exc:
+            if result["tips"] is not None:
+                await asyncio.to_thread(result["tips"].after_failure)
             raise LiquidHandlingFailed(str(exc)) from None
         return csv_path, result["steps"]
 

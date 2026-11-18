@@ -33,6 +33,9 @@ LC_200 = (
     "<Tecan.Core.Pipetting.LiquidClassEquationSet><DeviceType><PipettingDeviceType>AirFca</PipettingDeviceType>"
     "</DeviceType><DiTiTypeGroup>FCA DiTi 200µl</DiTiTypeGroup><AspiratePipettingSpeed>150</AspiratePipettingSpeed>"
     "</Tecan.Core.Pipetting.LiquidClassEquationSet>"
+    "<Tecan.Core.Pipetting.LiquidClassEquationSet><DeviceType><PipettingDeviceType>AirFca</PipettingDeviceType>"
+    "</DeviceType><DiTiTypeGroup>FCA DiTi 50µl</DiTiTypeGroup><AspiratePipettingSpeed>100</AspiratePipettingSpeed>"
+    "</Tecan.Core.Pipetting.LiquidClassEquationSet>"
 )
 
 
@@ -47,6 +50,16 @@ class FakePc:
             "FCA, 10ul SBS",
             "<Key>DiTiTypeGroup</Key><Value>FCA DiTi 10µl</Value>"
             "<Key>MaxNettoVolumeForTransferPhase</Key><Value>10</Value>",
+        ),
+        r"C\tip50.xcmp": vx(
+            "FCA, 50ul SBS",
+            "<Key>DiTiTypeGroup</Key><Value>FCA DiTi 50µl</Value>"
+            "<Key>MaxNettoVolumeForTransferPhase</Key><Value>45</Value>",
+        ),
+        r"C\tip50f.xcmp": vx(
+            "FCA, 50ul Filtered SBS",
+            "<Key>DiTiTypeGroup</Key><Value>FCA DiTi 50µl Filtered</Value>"
+            "<Key>MaxNettoVolumeForTransferPhase</Key><Value>45</Value>",
         ),
         r"C\trough.xcmp": vx(
             "4 Well SBS Trough", "<XNumberOfWells>4</XNumberOfWells><YNumberOfWells>1</YNumberOfWells>"

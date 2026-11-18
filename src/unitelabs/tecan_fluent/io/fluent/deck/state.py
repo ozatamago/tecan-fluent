@@ -26,6 +26,14 @@ every use and written atomically (a temporary file, then replaced):
 - Without the file, the positions of the labware tracker (``labware_positions.json``) are taken over once; while the
   new file cannot be written (or in a dry run) the old file keeps being read.
 - In a dry run, changes are kept in memory only (as the labware tracker does).
+
+Tip racks ("tips" of an entry): "kind" is "full" (a fresh rack), "as is" (put back as it was), "partial" (the next
+tip is at "next_well"), "used" (FluentControl no longer knows which tips are left) or "empty". FluentControl uses the
+tips of a rack column-wise (A1, B1, ..., H1, A2, ...) and every run start registers the racks as full, so a partial
+rack gets FluentControl's "Set Available Tips" (SetNextTipPositionStatement) at every run start, after the
+registration. The commands of LiquidHandling that take tips (GetTips, the Smart Commands, worklists) read from
+FluentControl's log which tips were taken from tracked racks and move "next_well" on; inside a run FluentControl's
+own count is authoritative. Tips taken any other way (a GUI script, raw XML) are not seen.
 """
 
 import contextlib
@@ -43,6 +51,7 @@ from unitelabs.cdk.config import Config
 
 from ...fluentcontrol.definitions import DefinitionCheckFailed, DefinitionView, FluentPc, _unescape, extract_references
 from ...fluentcontrol.errors import BackendError
+from ..arm.statements import TIP_RACK_COLUMNS, TIP_RACK_ROWS, set_next_tip_position_xml, well_index
 from ..gripper.statements import add_labware_xml, remove_labware_xml
 
 logger = logging.getLogger(__name__)
@@ -50,7 +59,8 @@ logger = logging.getLogger(__name__)
 DECK_FILE = r"C:\Users\Tecan\OFML\state\deck.json"
 """Where the Fluent PC example configurations keep the deck state."""
 TIP_KINDS = ("full", "as is")
-"""A fresh rack, or a rack taken out earlier and put back."""
+"""A fresh rack, or a rack taken out earlier and put back (PlaceTipRack also takes the well of the next tip)."""
+TIPS_PER_RACK = TIP_RACK_ROWS * TIP_RACK_COLUMNS
 WELL = re.compile(r"[A-Z]{1,2}[1-9][0-9]{0,2}")
 
 
@@ -117,6 +127,18 @@ class _File:
 
 def _position(entry: dict) -> str:
     return f"{entry.get('location')}[{entry.get('site')}]"
+
+
+def _well_name(index: int) -> str:
+    """Column-major index from 0 as a well name of a tip rack (0 -> A1, 8 -> A2)."""
+    return f"{chr(ord('A') + index % TIP_RACK_ROWS)}{index // TIP_RACK_ROWS + 1}"
+
+
+def next_tip_well(well: str) -> str:
+    """The well of the next tip, checked against the rack layout (8 x 12), e.g. "c1" -> "C1"."""
+    name = (well or "").strip().upper()
+    well_index(name, TIP_RACK_ROWS, TIP_RACK_COLUMNS)  # raises BackendError for "Z1", "I1", "A13", ...
+    return name
 
 
 def _at_base(entry: dict) -> bool:
@@ -356,12 +378,106 @@ class DeckState:
         return self._change(command, args, fn)
 
     def place_tip_rack(self, label: str, tip_type: str, location: str, site: int, kind: str, placed_by: str) -> int:
-        """PlaceLabware that also records the tip state ("full" or "as is"). A rack already on the deck at that
-        position is taken as refilled in place."""
-        if kind not in TIP_KINDS:
-            raise BackendError(f"Kind must be one of {', '.join(repr(k) for k in TIP_KINDS)}")
-        tips = {"kind": kind, "since": self._now()}
+        """PlaceLabware that also records the tip state: "full", "as is", or the well of the next tip (e.g. "C1",
+        a partly used rack). A rack already on the deck at that position is taken as refilled in place."""
+        if kind in TIP_KINDS:
+            tips = {"kind": kind, "since": self._now()}
+        else:
+            try:
+                well = next_tip_well(kind)
+            except BackendError:
+                raise BackendError(
+                    f"Kind must be one of {', '.join(repr(k) for k in TIP_KINDS)}, or the well of the next tip "
+                    "(e.g. 'C1')"
+                ) from None
+            tips = {"kind": "partial", "next_well": well, "since": self._now()}
         return self.place(label, tip_type, location, site, "", placed_by, tips, "PlaceTipRack")
+
+    def set_tip_rack_next_well(self, label: str, well: str, set_by: str = "") -> int:
+        """Record the well of the next tip of a rack on the deck (a rack of the base worktable at its base position
+        too). The rack is "partial" from then on: the position is set at every run start."""
+        well = next_tip_well(well)
+
+        def fn(entries: dict) -> dict:
+            before = entries.get(label)
+            if before is None:
+                view = self._view()
+                base = self._base_of(view, label)
+                if base is None:
+                    raise BackendError(self._unknown(label, view))
+                entry = {"type": view.labware[label].get("type", ""), **base, "base": base}
+            elif before.get("location") is None:
+                raise BackendError(f"{label} is recorded as taken off the deck; use PlaceTipRack")
+            else:
+                entry = copy.deepcopy(before)
+            entry["tips"] = {"kind": "partial", "next_well": well, "since": self._now(), "set_by": set_by}
+            entries[label] = entry
+            return {"label": label, "before": before, "after": entry}
+
+        return self._change("SetTipRackNextWell", {"label": label, "well": well, "by": set_by}, fn)
+
+    # ---- tips taken in a run
+    @staticmethod
+    def _tracked(e: dict) -> bool:
+        """Whether the deck state follows which tips of this rack are taken: partial racks, and full racks away from
+        their base position once registered (FluentControl's count of them is lost when the run ends)."""
+        tips = e.get("tips") or {}
+        if e.get("location") is None:
+            return False
+        if tips.get("kind") == "partial":
+            return True
+        return tips.get("kind") == "full" and bool(tips.get("registered_at")) and not _at_base(e)
+
+    def tracked_racks(self, tip_type: str = "") -> list[str]:
+        """Labels of the racks whose taken tips are followed (of one tip type, or all)."""
+        return sorted(
+            label
+            for label, e in self.load()["labware"].items()
+            if self._tracked(e) and (not tip_type or e.get("type") == tip_type)
+        )
+
+    def tips_taken(self, taken: dict[str, list[int]], candidates: list[str], source: str = "") -> int | None:
+        """Move the next tip of the candidate racks on after FluentControl took tips (well indexes from its log,
+        column-major from 0). Racks that are not candidates are left alone. Returns the new version, or None when
+        nothing changed."""
+        hits = {label: max(taken[label]) for label in candidates if taken.get(label)}
+        if not hits:
+            return None
+
+        def fn(entries: dict) -> dict:
+            changed = {}
+            for label, last in hits.items():
+                e = entries.get(label)
+                if not e or not self._tracked(e):
+                    continue
+                if last + 1 >= TIPS_PER_RACK:
+                    e["tips"] = {"kind": "empty", "since": self._now(), "by": source}
+                else:
+                    e["tips"] = {
+                        "kind": "partial",
+                        "next_well": _well_name(last + 1),
+                        "since": self._now(),
+                        "by": source,
+                    }
+                changed[label] = e["tips"]
+            return {"taken": {k: taken[k] for k in hits}, "after": changed}
+
+        return self._change("TipsTaken", {"source": source, "racks": sorted(hits)}, fn)
+
+    def tips_unknown(self, labels: list[str], reason: str) -> int | None:
+        """Racks that may have lost tips without the log saying which: "used" from now on (refused away from their
+        base position until recorded again with PlaceTipRack or SetTipRackNextWell)."""
+        if not labels:
+            return None
+
+        def fn(entries: dict) -> dict:
+            for label in labels:
+                e = entries.get(label)
+                if e and e.get("tips"):
+                    e["tips"] = {"kind": "used", "used_since": self._now(), "reason": reason}
+            return {"labels": labels, "reason": reason}
+
+        return self._change("TipsUnknown", {"labels": labels, "reason": reason}, fn)
 
     def remove(self, label: str, removed_by: str = "") -> int:
         """Record that a labware was taken off the deck."""
@@ -513,24 +629,31 @@ class DeckState:
         that are gone. A rack registered in an earlier run is not added again but becomes "used" (stale, listed in
         info["stale"]; mark_stale records it), and racks "used" or "as is" away from their base position are not
         added; check_labels refuses commands that use them. Racks at their base position keep FluentControl's own
-        count.
+        count. A partial rack (the well of its next tip recorded) is added like a full one wherever it is not at its
+        base position, and gets a SetNextTipPositionStatement after all AddLabware, at its base position too
+        (info["next_tips"]).
 
         runtime_labels are the labels on FluentControl's RuntimeWorkspace now (None: not known). Labware added in an
         earlier run can stay there, so a labware that is not on the base worktable but is on the RuntimeWorkspace is
         removed before it is added again."""
         state = self.load()
-        removes, adds, refills, stale = [], [], [], []
+        removes, adds, refills, stale, next_tips = [], [], [], [], {}
         for label in sorted(state["labware"]):
             e = state["labware"][label]
             tips = e.get("tips") or {}
             refill = tips.get("kind") == "full" and not tips.get("registered_at")
+            partial = tips.get("kind") == "partial" and bool(tips.get("next_well"))
             if e.get("location") is None:
                 if e.get("base"):
                     removes.append(label)
                 continue
+            if partial:
+                next_tips[label] = tips["next_well"]
             if _at_base(e) and not refill:
                 continue
-            if tips and not refill:  # a rack away from its base position whose tips FluentControl cannot know
+            if tips and not (
+                refill or partial
+            ):  # a rack away from its base position whose tips FluentControl cannot know
                 if tips.get("kind") == "full":
                     stale.append(label)
                 if e.get("base"):
@@ -553,6 +676,10 @@ class DeckState:
             )
             for label in adds
         ]
+        steps += [
+            (f"SetNextTipPosition {label} {well} (deck state)", set_next_tip_position_xml(label, well))
+            for label, well in next_tips.items()
+        ]
         info = {
             "file": self.config.state_file,
             "base_worktable": state["base_worktable"],
@@ -561,6 +688,7 @@ class DeckState:
             "added": {label: entries[label]["type"] for label in adds},
             "refilled": refills,
             "stale": stale,
+            "next_tips": next_tips,
         }
         return steps, info
 
@@ -583,9 +711,15 @@ class DeckState:
     def _unusable_rack(label: str, e: dict) -> str:
         """Why a rack away from its base position cannot be used, or ""."""
         tips = e.get("tips") or {}
+        fix = "replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off (Deck.RemoveLabware)"
+        if e.get("location") is not None and tips.get("kind") == "empty":
+            return f"tip rack {label} has no tips left; {fix}"
         if e.get("location") is None or _at_base(e) or tips.get("kind") not in ("used", "as is"):
             return ""
-        fix = "replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off (Deck.RemoveLabware)"
+        fix = (
+            "replace it with a full rack (Deck.PlaceTipRack Kind=full), record its next tip (Deck.SetTipRackNextWell) "
+            "or take it off (Deck.RemoveLabware)"
+        )
         if tips["kind"] == "used":
             return (
                 f"tip rack {label} was registered in an earlier run and FluentControl no longer knows which tips "
@@ -666,7 +800,8 @@ class DeckState:
         base = e.get("base")
         notes.append(f"base {base['location']}[{base['site']}]" if base else "not on the base worktable")
         if e.get("tips"):
-            notes.append(f"tips {e['tips']['kind']}")
+            next_well = e["tips"].get("next_well")
+            notes.append(f"tips {e['tips']['kind']}" + (f", next {next_well}" if next_well else ""))
         if e.get("contents"):
             notes.append(f"{len(e['contents'])} wells with contents")
         return text + f" ({', '.join(notes)})"
@@ -687,6 +822,8 @@ class DeckState:
                 continue
             where = "taken off the deck" if e.get("location") is None else f"at {_position(e)}"
             state = f"{tips['kind']} since {tips.get('used_since') or tips.get('since', '?')}"
+            if tips["kind"] == "partial":
+                state += f", next tip {tips.get('next_well')} (set at every run start)"
             if tips["kind"] == "full":
                 state += (
                     f", registered at run start {tips['registered_at']}"
@@ -695,6 +832,8 @@ class DeckState:
                 )
             if self._unusable_rack(label, e):
                 state += ", not usable: replace it with a full rack (PlaceTipRack Kind=full) or take it off"
+                if tips["kind"] != "empty":
+                    state += " (or record its next tip with SetTipRackNextWell)"
             out.append(f"{label}: {e.get('type', '')} {where} ({state})")
         return out
 

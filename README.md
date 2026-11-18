@@ -338,8 +338,9 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
 | | `RemoveLabware(Label, RemovedBy)` | Record that a labware was taken off the deck |
 | | `MoveLabwareRecord(Label, Location, Site, MovedBy)` | Record a move by something other than the RGA |
 | | `SetContents(Label, Wells, Liquid, Volumes)` | Record what is in the wells (for planning and checks later; also allowed during a run) |
-| | `PlaceTipRack(Label, TipType, Location, Site, Kind, PlacedBy)` | `PlaceLabware` for a tip rack, with `Kind` "full" or "as is"; a rack already at that position counts as refilled in place |
-| | `TipRacks` (P) | The racks recorded with `PlaceTipRack`: tip type, position, recorded state |
+| | `PlaceTipRack(Label, TipType, Location, Site, Kind, PlacedBy)` | `PlaceLabware` for a tip rack, with `Kind` "full", "as is" or the well of the next tip of a partly used rack (e.g. "C1"); a rack already at that position counts as refilled in place |
+| | `SetTipRackNextWell(Label, Well, SetBy)` | Record the well of the next tip of a rack on the deck (also at its base position); set in FluentControl at every run start |
+| | `TipRacks` (P) | The racks recorded with `PlaceTipRack` or `SetTipRackNextWell`: tip type, position, recorded state |
 | `HandsOff` | `Begin(Who, Reason, MaxMinutes)` | Hold the shared FluentControl lock for another robot; returns a token. Refused while a run is open or a command is sent. `MaxMinutes` 0 = `deck.hands_off_max_minutes` (30), also the maximum |
 | | `End(Token)` | Release it |
 | | `State` (P) | Who holds hands-off, why, since and until when (also when another server holds it); empty when free |
@@ -370,6 +371,20 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
   which tips are left; replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off
   (Deck.RemoveLabware)"). A rack put back "as is" away from its base position is refused the same way. `TipRacks`
   marks these racks as not usable.
+- **Partly used tip racks**: FluentControl uses the tips of a rack column-wise (A1, B1, ..., H1, A2, ...) and every
+  run start registers the racks as full. A rack recorded with the well of its next tip ("partial", from
+  `PlaceTipRack` with the well as `Kind`, or `SetTipRackNextWell`) is registered like a full one where it is not at
+  its base position and then gets FluentControl's "Set Available Tips (Worktable)"
+  (`SetNextTipPositionStatement`) for that well at every run start, at its base position too. `GetTips`, the Smart
+  Commands and worklists of `LiquidHandling` read from FluentControl's log which tips they took from such racks (and
+  from full racks away from their base position, which then become partial) and move the recorded well on; inside a
+  run FluentControl's own count is authoritative. When the log shows no tips taken by a command that succeeded, the
+  racks it may have used count as "used". Tips taken any other way (a GUI script, raw XML) are not seen: record the
+  well again. A rack at its base position without a recorded well keeps FluentControl's own count.
+- `LiquidHandling.SetNextTipPosition(Rack, Well)` sends the same statement inside an open run (verified on the
+  instrument 2026-11-18: the next GetTips took the tip at C1); FluentControl refuses a rack that is not on the run's
+  worktable ("Could not find labware '...' on worktable."). It holds for that run only, unless the deck state
+  follows the rack (its recorded well is set too).
 - Changes to the layout are refused while a run is open (FluentControl's run already has its layout) or while
   another server sends; they are allowed while hands-off is held, which is when the deck should be changed.
 - **Hands-off** is the shared lock held on behalf of `Who`: every server on the Fluent PC refuses FluentControl

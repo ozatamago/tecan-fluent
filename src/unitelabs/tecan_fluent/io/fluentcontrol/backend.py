@@ -317,16 +317,25 @@ class FluentControlBackend:
         present = self.preflight.run_base_labels(self._run_opened_ticks)
         if present is None:
             return steps
-        kept, absent = [], []
+        added = set(info.get("added") or {})
+        kept, absent, no_rack = [], [], []
         for label, xml in steps:
             m = re.search(r"<LabwareName>([^<]+)</LabwareName>", xml) if "RemoveLabwareDataV1" in xml else None
             if m and m.group(1).strip() not in present:
                 absent.append(m.group(1).strip())
                 continue
+            # a rack absent from the run's worktable and not added either: "Could not find labware" would end the run
+            m = re.search(r"<LabwareName>([^<]+)</LabwareName>", xml) if "SetNextTipPositionStatement" in xml else None
+            if m and m.group(1).strip() not in present and m.group(1).strip() not in added:
+                no_rack.append(m.group(1).strip())
+                continue
             kept.append((label, xml))
         if absent:
             logger.warning("Not removed at run start, already absent from the run's worktable: %s", absent)
             info["already_absent"] = absent
+        if no_rack:
+            logger.warning("Next tip not set at run start, rack absent from the run's worktable: %s", no_rack)
+            info["next_tip_not_set_absent"] = no_rack
         return kept
 
     def _deck_send(self, deck: list, report) -> None:
@@ -349,6 +358,8 @@ class FluentControlBackend:
         result = {"status": "ok", "seconds": durations, "deck_version": info["version"]}
         if info.get("already_absent"):
             result["not_removed_already_absent"] = info["already_absent"]
+        if info.get("next_tip_not_set_absent"):
+            result["next_tip_not_set_absent"] = info["next_tip_not_set_absent"]
         record.finish(result)
         if self._session:  # registered with AddLabware: known in this run like labware added with Labware.AddLabware
             self.session_labware.update(info["added"])

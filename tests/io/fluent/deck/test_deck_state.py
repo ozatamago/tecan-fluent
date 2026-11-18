@@ -189,7 +189,8 @@ def test_contents_and_tip_racks(tmp_path):
     assert d.tip_racks() == [
         f"{RACK}: FCA, 200ul SBS at Nest7mm_Pos[2] (full since 2026-10-21T10:00:00, registered at the next run start)",
         "FCA_ 200ul SBS[002]: FCA, 200ul SBS at HotelMP_Pos[4] (as is since 2026-10-21T10:00:00, "
-        "not usable: replace it with a full rack (PlaceTipRack Kind=full) or take it off)",
+        "not usable: replace it with a full rack (PlaceTipRack Kind=full) or take it off "
+        "(or record its next tip with SetTipRackNextWell))",
     ]
 
 
@@ -403,7 +404,8 @@ def test_a_rack_away_from_its_base_is_added_as_full_only_once(tmp_path):
     problems, _ = d.check_labels(_uses_rack(), base, set(backend.session_labware))
     assert problems == [
         f"tip rack {RACK9} was registered in an earlier run and FluentControl no longer knows which tips are left; "
-        "replace it with a full rack (Deck.PlaceTipRack Kind=full) or take it off (Deck.RemoveLabware)"
+        "replace it with a full rack (Deck.PlaceTipRack Kind=full), record its next tip (Deck.SetTipRackNextWell) "
+        "or take it off (Deck.RemoveLabware)"
     ]
     assert "not usable" in d.tip_racks()[0] and d.tip_racks()[0].startswith(
         f"{RACK9}: FCA, 200ul SBS at HotelMP_Pos[4] (used"
@@ -440,3 +442,133 @@ def test_a_rack_put_back_as_is_away_from_its_base_is_not_usable(tmp_path):
     d.place_tip_rack(RACK, "FCA, 200ul SBS", "Nest7mm_Pos", 2, "as is", "Franka")
     assert d.registration()[0] == []
     assert d.check_labels(_uses_rack(RACK), {PLATE, RACK})[0] == []
+
+
+# ---- partly used tip racks (the well of the next tip)
+def _next(well: str, label: str = RACK9) -> tuple[str, str]:
+    from unitelabs.tecan_fluent.io.fluent.arm.statements import set_next_tip_position_xml
+
+    return (f"SetNextTipPosition {label} {well} (deck state)", set_next_tip_position_xml(label, well))
+
+
+def test_a_partial_rack_is_registered_and_its_next_tip_set_at_every_run_start(tmp_path):
+    backend, d = _backend(tmp_path)
+    base = {PLATE, RACK}
+    with pytest.raises(BackendError, match="Kind must be one of 'full', 'as is', or the well of the next tip"):
+        d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "Z1", "a person")
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "c1", "a person")
+    assert d.entry(RACK9)["tips"] == {"kind": "partial", "next_well": "C1", "since": "2026-10-21T10:00:00"}
+    steps, info = d.registration()
+    assert steps == [
+        (
+            f"AddLabware {RACK9} at HotelMP_Pos[4] (deck state, bookkeeping only)",
+            add_labware_xml("FCA, 200ul SBS", RACK9, "HotelMP_Pos", 4),
+        ),
+        _next("C1"),
+    ]
+    assert info["next_tips"] == {RACK9: "C1"} and info["stale"] == [] and info["refilled"] == []
+    for _ in range(2):  # not stale in the following runs: added and set again every time
+        asyncio.run(backend.start_run())
+        assert d.entry(RACK9)["tips"]["kind"] == "partial" and RACK9 in backend.session_labware
+        assert d.check_labels(_uses_rack(), base, set(backend.session_labware))[0] == []
+        asyncio.run(backend.end_run())
+    assert d.tip_racks() == [
+        f"{RACK9}: FCA, 200ul SBS at HotelMP_Pos[4] (partial since 2026-10-21T10:00:00, next tip C1 "
+        "(set at every run start))"
+    ]
+    assert "tips partial, next C1" in d.layout()[1]
+
+
+def test_next_well_of_a_rack_at_its_base_position_is_set_without_registering_it(tmp_path):
+    d = deck(tmp_path)
+    assert d.registration()[0] == [] and d.tracked_racks() == []  # FluentControl's own count
+    d.set_tip_rack_next_well(RACK, "A2", "a person")
+    assert d.entry(RACK)["tips"]["kind"] == "partial" and d.entry(RACK)["base"] == {
+        "location": "Nest7mm_Pos",
+        "site": 2,
+    }
+    assert d.registration()[0] == [_next("A2", RACK)]
+    assert d.tracked_racks("FCA, 200ul SBS") == [RACK] and d.tracked_racks("FCA, 10ul SBS") == []
+    with pytest.raises(BackendError, match="neither on the base worktable"):
+        d.set_tip_rack_next_well("Ghost[001]", "A1")
+    with pytest.raises(BackendError, match="is not like A1|outside the labware"):
+        d.set_tip_rack_next_well(RACK, "M1")
+    # back to FluentControl's own count
+    d.place_tip_rack(RACK, "FCA, 200ul SBS", "Nest7mm_Pos", 2, "as is", "a person")
+    assert d.registration()[0] == [] and d.tracked_racks() == []
+
+
+def test_tips_taken_move_the_next_tip_on(tmp_path):
+    d = deck(tmp_path)
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "C1", "a person")
+    assert d.tips_taken({"Other[001]": [5]}, [RACK9]) is None  # another rack: nothing changes
+    d.tips_taken({RACK9: [2, 3, 4]}, [RACK9], "GetTips")
+    assert d.entry(RACK9)["tips"]["next_well"] == "F1"
+    d.tips_taken({RACK9: [7]}, [RACK9], "GetTips")
+    assert d.entry(RACK9)["tips"]["next_well"] == "A2"
+    d.tips_taken({RACK9: [95]}, [RACK9], "GetTips")
+    assert d.entry(RACK9)["tips"]["kind"] == "empty" and d.tracked_racks() == []
+    [problem] = d.check_labels(_uses_rack(), {PLATE, RACK})[0]
+    assert problem.startswith(f"tip rack {RACK9} has no tips left")
+    assert d.registration()[0] == []
+
+
+def test_a_full_rack_away_from_its_base_becomes_partial_once_its_tips_taken_are_seen(tmp_path):
+    backend, d = _backend(tmp_path)
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "full", "a person")
+    assert d.tracked_racks() == []  # not registered yet: FluentControl does not have it
+    asyncio.run(backend.start_run())
+    assert d.tracked_racks() == [RACK9]
+    d.tips_taken({RACK9: [0]}, [RACK9], "GetTips")
+    asyncio.run(backend.end_run())
+    assert d.entry(RACK9)["tips"]["next_well"] == "B1"
+    assert [label for label, _ in d.registration()[0]] == [
+        f"AddLabware {RACK9} at HotelMP_Pos[4] (deck state, bookkeeping only)",
+        _next("B1")[0],
+    ]
+
+
+def test_tips_unknown_make_the_rack_used(tmp_path):
+    d = deck(tmp_path)
+    d.place_tip_rack(RACK9, "FCA, 200ul SBS", "HotelMP_Pos", 4, "C1", "a person")
+    d.tips_unknown([RACK9], "GetTips: the log shows no Get Tips")
+    assert d.entry(RACK9)["tips"]["kind"] == "used" and d.registration()[0] == []
+    assert "record its next tip (Deck.SetTipRackNextWell)" in d.check_labels(_uses_rack(), {PLATE, RACK})[0][0]
+    d.set_tip_rack_next_well(RACK9, "D1", "a person")  # counted again
+    assert d.check_labels(_uses_rack(), {PLATE, RACK})[0] == []
+
+
+def test_deck_files_written_before_partial_racks_are_read_as_before(tmp_path):
+    (tmp_path / "deck.json").write_text(
+        json.dumps(
+            {
+                "labware": {
+                    RACK9: {
+                        "type": "FCA, 200ul SBS",
+                        "location": "HotelMP_Pos",
+                        "site": 4,
+                        "base": None,
+                        "tips": {"kind": "used", "since": "2026-11-01T09:00:00", "used_since": "2026-11-02T09:00:00"},
+                    },
+                    "FCA_ 200ul SBS[008]": {
+                        "type": "FCA, 200ul SBS",
+                        "location": "HotelMP_Pos",
+                        "site": 3,
+                        "base": None,
+                        "tips": {"kind": "full", "since": "2026-11-01T09:00:00"},
+                    },
+                },
+                "base_worktable": WORKTABLE,
+                "version": 49,
+            }
+        )
+    )
+    d = deck(tmp_path)
+    steps, info = d.registration()
+    assert [label for label, _ in steps] == [
+        "AddLabware FCA_ 200ul SBS[008] at HotelMP_Pos[3] (deck state, bookkeeping only)"
+    ]
+    assert info["next_tips"] == {} and info["refilled"] == ["FCA_ 200ul SBS[008]"]
+    assert "registered in an earlier run" in d.check_labels(_uses_rack(), {PLATE, RACK})[0][0]
+    d.set_tip_rack_next_well(RACK9, "E5", "a person")
+    assert d.load()["version"] == 50

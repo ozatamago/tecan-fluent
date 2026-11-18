@@ -91,3 +91,26 @@ def test_removal_of_labware_absent_from_the_runs_worktable_is_not_sent():
     # the worktable of the run is not known: everything is sent
     backend.preflight.run_base_labels = lambda since: None
     assert backend._without_absent_removals(steps, {}) == steps
+
+
+def test_next_tip_of_a_rack_absent_from_the_runs_worktable_is_not_set():
+    # "Could not find labware '...' on worktable." would end the run; a rack added in the same registration is there
+    from unitelabs.tecan_fluent.io.fluent.arm.statements import set_next_tip_position_xml
+    from unitelabs.tecan_fluent.io.fluent.gripper.statements import add_labware_xml
+
+    backend = FluentControlBackend(FluentBackendConfig())
+    backend.preflight.run_base_labels = lambda since: {"Rack[001]"}
+    steps = [
+        ("AddLabware Rack[009]", add_labware_xml("FCA, 200ul SBS", "Rack[009]", "HotelMP_Pos", 4)),
+        ("SetNextTipPosition Rack[001] C1", set_next_tip_position_xml("Rack[001]", "C1")),
+        ("SetNextTipPosition Rack[003] A2", set_next_tip_position_xml("Rack[003]", "A2")),
+        ("SetNextTipPosition Rack[009] B1", set_next_tip_position_xml("Rack[009]", "B1")),
+    ]
+    info = {"added": {"Rack[009]": "FCA, 200ul SBS"}}
+    kept = backend._without_absent_removals(steps, info)
+    assert [label for label, _ in kept] == [
+        "AddLabware Rack[009]",
+        "SetNextTipPosition Rack[001] C1",
+        "SetNextTipPosition Rack[009] B1",
+    ]
+    assert info["next_tip_not_set_absent"] == ["Rack[003]"]

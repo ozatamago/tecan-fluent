@@ -12,9 +12,11 @@ from unitelabs.tecan_fluent.io.fluent.arm.statements import (
     get_tips_xml,
     move_arm_xml,
     pipetting_xml,
+    set_next_tip_position_xml,
     well_index,
     wells_fields,
 )
+from unitelabs.tecan_fluent.io.fluentcontrol.statements import wrap
 
 
 def obj(xml: str) -> list[str]:
@@ -80,6 +82,31 @@ def test_get_tips_can_name_the_rack():
     assert "<LabwareName>FCA_ 1000ul SBS[002]</LabwareName>" in get_tips_xml(
         "FCA, 1000ul SBS", [1], "FCA_ 1000ul SBS[002]"
     )
+
+
+def test_set_next_tip_position_is_the_form_accepted_on_the_instrument():
+    # sent inside an open run on 2026-11-18; the next GetTips took the tip at C1
+    assert set_next_tip_position_xml("FCA_ 1000ul SBS[002]", "c1") == wrap(
+        '<Object Type="Tecan.Core.Scripting.Worktable.SetNextTipPositionStatement">\n'
+        "<SetNextTipPositionStatement>\n"
+        "<LabwareName>FCA_ 1000ul SBS[002]</LabwareName>\n"
+        "<SelectedWellIndexes>\n"
+        '<Object Type="System.Int32">\n'
+        "<int>2</int>\n"
+        "</Object>\n"
+        "</SelectedWellIndexes>\n"
+        "<SelectedWellsString>C1</SelectedWellsString>\n"
+        "<IsBreakpoint>False</IsBreakpoint>\n"
+        "<IsDisabledForExecution>False</IsDisabledForExecution>\n"
+        "<LineNumber>1</LineNumber>\n"
+        "</SetNextTipPositionStatement>\n"
+        "</Object>"
+    )
+    assert "<int>8</int>" in set_next_tip_position_xml("R", "A2") and "<int>95</int>" in set_next_tip_position_xml(
+        "R", "H12"
+    )
+    with pytest.raises(Exception, match="outside the labware"):
+        set_next_tip_position_xml("R", "A13")
 
 
 def test_move_arm_one_channel_at_travel_height():
@@ -150,3 +177,135 @@ def test_liquid_class_without_settings_for_the_tip_and_10ul_on_pcr_are_refused()
         await backend.end_run()
 
     asyncio.run(scenario())
+
+
+def test_50ul_tips_and_their_liquid_class_settings():
+    lh, lc, backend = _setup()
+    S = _S()
+
+    async def scenario():
+        await backend.start_run()
+        await lc.add_labware("Water[001]", "4 Well SBS Trough", "Nest7mm_Pos", 5, status=S)
+        await lh.get_tips("FCA, 50ul SBS", [1], "FCA_ 50ul SBS[001]", status=S)
+        await lh.get_tips("FCA, 50ul Filtered SBS", [2], "", status=S)
+        assert backend.tips[1]["group"] == "FCA DiTi 50µl" and backend.tips[1]["capacity"] == 45
+        with pytest.raises(LiquidHandlingFailed, match="more than a FCA, 50ul SBS tip holds"):
+            await lh.aspirate("Water[001]", ["A1"], [46], "Water Free Single", [1], status=S)
+        await lh.aspirate("Water[001]", ["A1"], [30], "Water Free Single", [1], status=S)
+        with pytest.raises(LiquidHandlingFailed, match="no Air FCA settings for FCA DiTi 50µl Filtered"):
+            await lh.aspirate("Water[001]", ["A1"], [30], "Water Free Single", [2], status=S)
+        await lh.drop_tips([1, 2], status=S)
+        await backend.end_run()
+
+    asyncio.run(scenario())
+
+
+def test_set_next_tip_position_needs_a_run_and_sends_the_statement():
+    lh, _lc, backend = _setup()
+    S = _S()
+    sent = []
+    run_steps = backend.run_steps
+
+    async def capture(steps, *args, **kwargs):
+        sent.extend(steps)
+        return await run_steps(steps, *args, **kwargs)
+
+    backend.run_steps = capture
+
+    async def scenario():
+        with pytest.raises(LiquidHandlingFailed, match="Start a run first"):
+            await lh.set_next_tip_position("FCA_ 1000ul SBS[002]", "C1", status=S)
+        await backend.start_run()
+        with pytest.raises(LiquidHandlingFailed, match="outside the labware"):
+            await lh.set_next_tip_position("FCA_ 1000ul SBS[002]", "I1", status=S)
+        await lh.set_next_tip_position("FCA_ 1000ul SBS[002]", "c1", status=S)
+        await backend.end_run()
+
+    asyncio.run(scenario())
+    assert sent == [
+        ("SetNextTipPosition FCA_ 1000ul SBS[002] C1", set_next_tip_position_xml("FCA_ 1000ul SBS[002]", "C1"))
+    ]
+
+
+# ---- the next tip of the racks the deck state follows, from FluentControl's log
+GET_TIPS_LOG = (
+    "2026-11-18 10:00:01.000\tExecution parameters for 'Get Tips' at line 1: Worktable: WT ModifiedLabware: "
+    "FCA_ 200ul SBS[009] ModifiedDitiType: TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 200ul SBS ModifiedSelectedTipIndexes: "
+    "0, 1 ModifiedSelectedWellIndexes: 2, 3 ModifiedAirgapSpeed: 70.00 ul/s\n"
+)
+
+
+class LogPc:
+    def __init__(self, logs):
+        self.logs = list(logs)
+        self.reads = 0
+
+    def run_ps(self, script, timeout):
+        if "Get-Date" in script:
+            return b"2026-11-18 10:00:00.000"
+        self.reads += 1
+        return (self.logs.pop(0) if self.logs else "").encode()
+
+
+def _deck_with_partial_rack(tmp_path):
+    from unitelabs.tecan_fluent.io.fluent.deck.state import DeckConfig, DeckState
+
+    d = DeckState(DeckConfig(state_file=str(tmp_path / "deck.json")), "WT", definitions=None)
+    d.place_tip_rack("FCA_ 200ul SBS[009]", "FCA, 200ul SBS", "HotelMP_Pos", 4, "C1", "a person")
+    return d
+
+
+def test_tip_follower_moves_the_next_tip_on_from_the_log(tmp_path, monkeypatch):
+    from unitelabs.tecan_fluent.features.fluent.arm import liquid_handling
+
+    monkeypatch.setattr(liquid_handling.time, "sleep", lambda s: None)
+    d = _deck_with_partial_rack(tmp_path)
+    pc = LogPc(["", GET_TIPS_LOG])  # the log write lags once
+    f = liquid_handling._TipFollower(d, pc, ["FCA_ 200ul SBS[009]"], "2026-11-18 10:00:00.000", "GetTips")
+    out = f.after(f.read())
+    assert pc.reads == 2 and out["tip_tracking"]["taken"] == {"FCA_ 200ul SBS[009]": [2, 3]}
+    assert d.entry("FCA_ 200ul SBS[009]")["tips"]["next_well"] == "E1"
+
+
+def test_tip_follower_marks_the_racks_used_when_the_log_shows_no_tips(tmp_path, monkeypatch):
+    from unitelabs.tecan_fluent.features.fluent.arm import liquid_handling
+
+    monkeypatch.setattr(liquid_handling.time, "sleep", lambda s: None)
+    d = _deck_with_partial_rack(tmp_path)
+    f = liquid_handling._TipFollower(d, LogPc([]), ["FCA_ 200ul SBS[009]"], "2026-11-18 10:00:00.000", "GetTips")
+    assert "shows no Get Tips" in f.after(f.read())["tip_tracking"]["unknown"]
+    assert d.entry("FCA_ 200ul SBS[009]")["tips"]["kind"] == "used"
+    # after a failed command, nothing is assumed when the log shows nothing
+    d.set_tip_rack_next_well("FCA_ 200ul SBS[009]", "C1")
+    f = liquid_handling._TipFollower(d, LogPc([]), ["FCA_ 200ul SBS[009]"], "2026-11-18 10:00:00.000", "GetTips")
+    f.after_failure()
+    assert d.entry("FCA_ 200ul SBS[009]")["tips"] == {
+        "kind": "partial",
+        "next_well": "C1",
+        "since": d.entry("FCA_ 200ul SBS[009]")["tips"]["since"],
+        "set_by": "",
+    }
+
+
+def test_get_tips_follows_only_tracked_racks(tmp_path):
+    lh, _lc, backend = _setup()
+    d = _deck_with_partial_rack(tmp_path)
+    backend.deck = d
+    lh.pc = LogPc([])
+    assert lh._tip_follower("FCA, 200ul SBS", "", "x") is None  # a dry run: nothing is followed
+    backend.config.dry_run = False
+    try:
+        assert lh._tip_follower("FCA, 200ul SBS", "", "x").candidates == ["FCA_ 200ul SBS[009]"]
+        assert lh._tip_follower("FCA, 200ul SBS", "FCA_ 200ul SBS[009]", "x").candidates == ["FCA_ 200ul SBS[009]"]
+        assert lh._tip_follower("FCA, 200ul SBS", "FCA_ 200ul SBS[001]", "x") is None  # FluentControl's own count
+        assert lh._tip_follower("FCA, 10ul SBS", "", "x") is None
+    finally:
+        backend.config.dry_run = True
+
+
+def test_tips_taken_are_read_from_get_tips_entries_of_the_log():
+    from unitelabs.tecan_fluent.io.fluentcontrol.fc_log import tips_taken
+
+    assert tips_taken((FIX / "fc_log_worklist.txt").read_text(encoding="utf-8")) == {"FCA_ 200ul SBS[001]": [77, 78]}
+    assert tips_taken(GET_TIPS_LOG) == {"FCA_ 200ul SBS[009]": [2, 3]}
+    assert tips_taken("") == {}

@@ -1,4 +1,5 @@
-"""Build the XML of the Air FCA pipetting statements (GetTips, Aspirate, Dispense, Mix, DropTips, MoveArm).
+"""Build the XML of the Air FCA pipetting statements (GetTips, Aspirate, Dispense, Mix, DropTips, MoveArm) and of
+Set Available Tips (Worktable).
 
 The XML is the 1-channel form that ran on the instrument in August 2026 (tests/fixtures/liha_verified); only the
 values change (labware, wells, volumes, liquid class, channels, tip type). The Smart statements are in
@@ -13,6 +14,8 @@ WASTE = "FCA Thru Deck Waste Chute_1"
 
 
 TIP_SPACING = 9  # mm; every verified and GUI statement on 96-well plates and troughs uses 9
+TIP_RACK_ROWS, TIP_RACK_COLUMNS = 8, 12
+"""Every FCA SBS tip rack holds 96 tips in 8 rows and 12 columns."""
 
 
 def _template(name: str) -> str:
@@ -64,6 +67,33 @@ def get_tips_xml(tip_type: str, channels: list[int], rack: str = "") -> str:
     xml = _set(xml, "LabwareName", rack)
     xml = re.sub(r"TOOLNAME:[^<]*<", f"TOOLNAME:{_esc(tip_type)}<", xml, count=1)
     return wrap(xml)
+
+
+def set_next_tip_position_xml(rack: str, well: str, rows: int = TIP_RACK_ROWS, columns: int = TIP_RACK_COLUMNS) -> str:
+    """FluentControl's "Set Available Tips (Worktable)": the next GetTips takes tips from this rack starting at well.
+
+    FluentControl uses the tips of a rack column-wise (A1, B1, ..., H1, A2, ...), so setting C1 marks A1 and B1 as
+    used. The setting holds only in the open run: every run start registers the racks as full again. Refused by
+    FluentControl ("Could not find labware '...' on worktable.") when the rack is not on the run's worktable. Form
+    accepted by FluentControl 2026-11-18 (inside an open run; the next GetTips took the tip at C1)."""
+    name = well.strip().upper()
+    index = well_index(name, rows, columns)
+    return wrap(
+        '<Object Type="Tecan.Core.Scripting.Worktable.SetNextTipPositionStatement">\n'
+        "<SetNextTipPositionStatement>\n"
+        f"<LabwareName>{_esc(rack)}</LabwareName>\n"
+        "<SelectedWellIndexes>\n"
+        '<Object Type="System.Int32">\n'
+        f"<int>{index}</int>\n"
+        "</Object>\n"
+        "</SelectedWellIndexes>\n"
+        f"<SelectedWellsString>{name}</SelectedWellsString>\n"
+        "<IsBreakpoint>False</IsBreakpoint>\n"
+        "<IsDisabledForExecution>False</IsDisabledForExecution>\n"
+        "<LineNumber>1</LineNumber>\n"
+        "</SetNextTipPositionStatement>\n"
+        "</Object>"
+    )
 
 
 def move_arm_xml(labware: str, well: str, channels: list[int], rows: int, columns: int) -> str:

@@ -76,15 +76,29 @@ read back.
 
 ## 3. Tip racks
 
-- `PlaceTipRack(Label, TipType, Location, Site, Kind, PlacedBy)` with `Kind` "full" (a fresh rack) or "as is"
-  (a rack taken out earlier and put back). It is a `PlaceLabware` that also records the tip state.
+- `PlaceTipRack(Label, TipType, Location, Site, Kind, PlacedBy)` with `Kind` "full" (a fresh rack), "as is"
+  (a rack taken out earlier and put back) or the well of the next tip of a partly used rack (e.g. "C1"). It is a
+  `PlaceLabware` that also records the tip state.
+- `SetTipRackNextWell(Label, Well, SetBy)`: the well of the next tip of a rack already on the deck (also a
+  base-worktable rack at its base position). Recorded as `"tips": {"kind": "partial", "next_well": "C1", ...}`.
+- FluentControl has the statement: "Set Available Tips (Worktable)",
+  `Tecan.Core.Scripting.Worktable.SetNextTipPositionStatement` (LabwareName, SelectedWellIndexes column-major from
+  0, SelectedWellsString). Verified 2026-11-18 inside an open run: the next GetTips took the tip at C1. FluentControl
+  uses the tips column-wise (A1, B1, ..., H1, A2, ...). Every run start registers the racks as full, so it is sent
+  at every run start for every partial rack, after the RemoveLabware / AddLabware of the registration.
 - A rack recorded as "full" is registered at the next run start with `RemoveLabware` + `AddLabware`, so FluentControl
   sees a full rack (a newly added rack is full). Investigate first, on the Fluent 480 and in the FluentControl manual,
   whether FluentControl has a statement that sets the next tip position or refills a rack; if it has, prefer it and
   record which. Until checked on the device, do not rely on either being honoured: `GetTips` keeps its timeout.
 - `TipRacks` (property): each rack with its tip type, position and recorded state.
 - After `DropTips`/`SetTipsBack` nothing is assumed about the rack; FluentControl's own count stays authoritative
-  between refills.
+  between refills, and inside a run.
+- Tracked racks (partial racks, and full racks away from their base position once registered): after `GetTips`, the
+  Smart Commands and worklists of `LiquidHandling`, FluentControl's log is read ("Execution parameters for 'Get
+  Tips'": `ModifiedLabware`, `ModifiedSelectedWellIndexes`) and the next well becomes the one after the last tip
+  taken from each rack ("empty" after H12, refused). A command that succeeded without a Get Tips in the log (or
+  with an unreadable log) makes the racks it may have used "used". After a failed command only what the log shows
+  is recorded. Tips taken any other way are not seen. Not followed in a dry run.
 
 ## 4. Hands-off (another robot works on the deck)
 
@@ -178,8 +192,9 @@ Where the implementation differs from or adds to the text above:
 Open questions (to check on the instrument and in the FluentControl manual; nothing relies on them yet, and GetTips
 keeps its timeout):
 
-- Is there a FluentControl statement that sets the next tip position or refills a rack? Not investigated on the
-  device; until then a full rack is registered with RemoveLabware + AddLabware.
+- The next tip position: answered, `SetNextTipPositionStatement` (section 3). Not yet checked on the instrument: the
+  log entries of a GetTips sent on its own (only those of Smart Commands and worklists were checked, 2026-10-16),
+  and the statement right after an AddLabware of the same rack at run start.
 - Does a rack registered with RemoveLabware + AddLabware count as full, and does FluentControl keep its count of used
   tips for it in the following runs (which start from the worktable again)? Until this is known, a rack away from its
   base position is usable only in the run that registered it.

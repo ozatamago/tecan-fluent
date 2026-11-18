@@ -85,6 +85,22 @@ def expanded_steps(log_text: str) -> list[dict]:
     return steps
 
 
+def tips_taken(log_text: str) -> dict[str, list[int]]:
+    """Tip positions FluentControl took, per rack (well indexes, column-major from 0), from the "Execution parameters
+    for 'Get Tips'" entries of the log text LOG_PS1 returns. Unlike expanded_steps it does not need the "Line n :"
+    entry of an expanded line, so it also covers a GetTips sent on its own."""
+    taken: dict[str, list[int]] = {}
+    for raw in log_text.splitlines():
+        m = PARAMS.search(raw)
+        if not m or m.group(1) != "Get Tips":
+            continue
+        rack = re.search(r"ModifiedLabware: (.+?) Modified", m.group(3))
+        tips = re.search(r"ModifiedSelectedWellIndexes: ([0-9, ]+?)(?: Modified|\s*$)", m.group(3))
+        if rack and tips:
+            taken.setdefault(rack.group(1).strip(), []).extend(int(x) for x in re.findall(r"\d+", tips.group(1)))
+    return taken
+
+
 def describe(steps: list[dict], rows_of) -> list[str]:
     """Readable lines, e.g. "3 Aspirate 4 Well SBS Trough[001] A1: 90 ul (takes up 116.97 ul)". rows_of(labware)
     gives the rows of a labware (None if unknown: indexes are then shown as numbers)."""

@@ -72,9 +72,10 @@ class Deck(sila.Feature):
 
     @sila.UnobservableProperty(errors=[DeckCommandFailed])
     async def get_tip_racks(self) -> list[str]:
-        """Every tip rack recorded with PlaceTipRack: tip type, position and recorded state ("full" racks are
-        registered at the next run start, after which FluentControl's own count of used tips is authoritative; racks
-        away from their base position that are "used" or "as is" are marked not usable)."""
+        """Every tip rack recorded with PlaceTipRack or SetTipRackNextWell: tip type, position and recorded state
+        ("full" racks are registered at the next run start, after which FluentControl's own count of used tips is
+        authoritative; "partial" racks get the well of their next tip at every run start; racks away from their base
+        position that are "used" or "as is", and empty racks, are marked not usable)."""
         if self.deck is None:
             return []
         return await self._call(self.deck.tip_racks)
@@ -161,17 +162,20 @@ class Deck(sila.Feature):
 
         A "full" rack is registered at the next run start with RemoveLabware / AddLabware, so FluentControl sees a
         full rack. At its base position FluentControl then keeps its own count of used tips. Away from its base
-        position a rack is registered once only: from the following run on it counts as used, and commands that use
-        it are refused until a full rack is recorded again or it is taken off; a rack put back "as is" away from its
-        base position is refused the same way (FluentControl cannot know which tips are left). Whether FluentControl
-        honours the registration is not confirmed on the instrument yet: GetTips keeps its timeout.
+        position a full rack is registered once only; the tips LiquidHandling takes from it in that run are read from
+        FluentControl's log and the rack becomes "partial". A partial rack (Kind is the well of its next tip, e.g.
+        "C1") is registered at every run start and then gets FluentControl's "Set Available Tips" for that well
+        (FluentControl uses tips column-wise: A1, B1, ..., H1, A2, ...). A rack whose tips taken are unknown counts
+        as used, and away from its base position commands that use it are refused until it is recorded again or
+        taken off; a rack put back "as is" away from its base position is refused the same way.
 
         Args:
           Label: Name of the rack, e.g. "FCA_ 200ul SBS[001]".
           TipType: FluentControl tip type, e.g. "FCA, 200ul SBS".
           Location: Location name, e.g. "Nest7mm_Pos".
           Site: Site number (from 1).
-          Kind: "full" (a fresh rack) or "as is" (a rack taken out earlier and put back).
+          Kind: "full" (a fresh rack), "as is" (a rack taken out earlier and put back), or the well of the next tip
+            of a partly used rack, e.g. "C1" (A1 and B1 are gone).
           PlacedBy: Who put it there.
 
         Returns:
@@ -179,3 +183,26 @@ class Deck(sila.Feature):
         """
         deck = self._need()
         return await self._call(deck.place_tip_rack, label, tip_type, location, site, kind, placed_by)
+
+    @sila.UnobservableCommand(errors=[DeckCommandFailed])
+    async def set_tip_rack_next_well(self, label: str, well: str, set_by: str) -> int:
+        """
+        Record the well of the next tip of a tip rack on the deck (a partly used rack). Moves nothing. Works for a
+        rack of the base worktable at its base position too; FluentControl's own count is overridden from then on.
+
+        At every run start, after the registration, FluentControl gets "Set Available Tips" for this well, and the
+        tips LiquidHandling takes from the rack (GetTips, the Smart Commands, worklists) move the recorded well on,
+        read from FluentControl's log. FluentControl uses tips column-wise (A1, B1, ..., H1, A2, ...), so "C1" means
+        A1 and B1 are gone. Tips taken any other way (a GUI script, raw XML) are not seen: record the well again.
+        To give a rack at its base position back to FluentControl's own count, record it with PlaceTipRack.
+
+        Args:
+          Label: Name of the rack, e.g. "FCA_ 1000ul SBS[002]".
+          Well: Well of the next tip, e.g. "C1".
+          SetBy: Who counted the tips, e.g. "a person".
+
+        Returns:
+          Version: The version of the deck state after the change.
+        """
+        deck = self._need()
+        return await self._call(deck.set_tip_rack_next_well, label, well, set_by)

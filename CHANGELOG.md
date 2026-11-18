@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `LiquidHandling.SetNextTipPosition(Rack, Well)`: FluentControl's "Set Available Tips (Worktable)"
+  (`SetNextTipPositionStatement`) inside an open run; FluentControl uses tips column-wise (A1, B1, ..., A2, ...).
+- Partly used tip racks in the deck state: `Deck.PlaceTipRack` takes the well of the next tip as `Kind`, and
+  `Deck.SetTipRackNextWell(Label, Well, SetBy)` records it for a rack on the deck. Such racks get the statement at
+  every run start, after the registration; `GetTips`, the Smart Commands and worklists move the recorded well on
+  from FluentControl's log (full racks away from their base position become partial instead of "used" when their
+  tips taken are seen). Existing deck.json files are read as before.
+- `FCA, 50ul Filtered SBS` among the tip types of `LiquidHandling` (`FCA, 50ul SBS` was accepted already; the
+  GetTips description now lists both).
+
 - `Fluent - Lab Capabilities` (`jp.riken.bdr/tecan.fluent/LabCapabilities/v1`, docs/lab_capabilities_spec.md): read
   only description of the Fluent for planning across a lab. Places with the labware they accept, gripper modes and
   pipetting access, labware and tip types and liquid classes are read from the FluentControl database; arms,
