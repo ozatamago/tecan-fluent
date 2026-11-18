@@ -8,11 +8,7 @@ from unitelabs.cdk import sila
 
 from ...io.cplc.macros import mtc_set_temperature_xml
 from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
-from ..device_macro import TemperatureSettingFailed, check_range, send_macro
-
-
-class TemperatureReadingFailed(Exception):
-    """A fresh CPLC driver temperature could not be obtained; no estimated value is substituted."""
+from ..device_macro import TemperatureReadingFailed, TemperatureSettingFailed, check_range, send_macro
 
 
 @dataclasses.dataclass

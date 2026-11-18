@@ -15,6 +15,11 @@ class TemperatureSettingFailed(Exception):
     """The temperature could not be set. The description explains why (out of range, FluentControl busy, ...)."""
 
 
+class TemperatureReadingFailed(Exception):
+    """A fresh temperature could not be read from the device driver; no estimated value is substituted. The
+    description explains why (no open run, read macro not enabled, no reply in FluentControl's log, ...)."""
+
+
 def check_range(temperature: float, low: float, high: float, device: str) -> None:
     if not low <= temperature <= high:
         raise TemperatureSettingFailed(

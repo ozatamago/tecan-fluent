@@ -689,6 +689,13 @@ class FluentControlBackend:
         async with self._exclusive(f"CPLC: read temperature slot {slot}"):
             return await asyncio.to_thread(self._guarded, read_temperature, self, slot, report)
 
+    async def read_bioshake_temperature(self, report=lambda _: None) -> dict:
+        """Read the BioShake temperature in the open run (io/bioshake/temperature.py), sharing the operation lock."""
+        from ..bioshake.temperature import read_temperature
+
+        async with self._exclusive("BioShake: read temperature"):
+            return await asyncio.to_thread(self._guarded, read_temperature, self, report)
+
     def _guarded(self, fn, *args):
         """On an unexpected exception from a backend call, drop the connection (rebuilt next time); raise
         BackendError."""

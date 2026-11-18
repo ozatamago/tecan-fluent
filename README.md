@@ -419,12 +419,14 @@ worktable (empty: `fluent.definitions.workspace`) and how long a reading is kept
 | Feature | Command | Range (as restricted by the connector) |
 |---|---|---|
 | `BioShake` | `SetTemperature(Temperature)` / `TemperatureOff` | 4–70 °C |
+| | `ReadTemperature` -> `Reading` (`TemperatureC`, `LogTimestamp`, `Source`) | in an open run; **not confirmed yet**, see below |
 | | `LockPlate` / `UnlockPlate` | |
 | | `ShakeOn(Speed)` / `ShakeOff` | 1000, 1200, 1400, 1600, 1800 or 2000 rpm |
 | `ShakingIncubator` (Inheco Incubator Shaker DWP) | `SetTemperature(Temperature)` | 20–60 °C |
 | | `Close` | |
 | | `ShakeOn` / `ShakeOff` | fixed preset `14,1.0,14,1.0,180` |
 | `CoolingHeatingPlates` (the 3 CPLC positions, inhecoMTC) | `SetTemperature(Slot, Temperature)` / `TurnOff(Slot)` | 4–70 °C, slots 1–3 |
+| | `ReadTemperature(Slot)` -> `Reading` (`Slot`, `TemperatureC`, `LogTimestamp`, `Source`) | in an open run; needs the driver's GetTemperature macro enabled, see below |
 | `Incubator1` (6 Nest Incubator Shaking) | `SetTemperature(Temperature)` (all positions) | 20–50 °C |
 | | `CloseDoor` | |
 | | `StartShaker(Frequency)` / `StopShaker` | 1.0–8.5 Hz |
@@ -438,6 +440,31 @@ worktable (empty: `fluent.definitions.workspace`) and how long a reading is kept
   `inheco_incubator/`, `cplc/`, `incubator1/`).
 - Tecan's cleanup (Sub_Cleanup) returns the Inheco incubator and Incubator1 to 25 °C, sends TempOff to the BioShake,
   and turns the CPLC off.
+
+#### Reading temperatures
+
+A legacy driver macro does not return its value over the API, so `ReadTemperature` notes the Fluent PC time, sends the
+driver's read macro inside the open run (`RunControl.StartRun` first; it never starts a run of its own) and takes the
+value from FluentControl's log written after that time (over SSH, like the ODTC temperatures). It sets nothing and
+does not move. It fails (`TemperatureReadingFailed`) in dry-run mode, without an open run, and whenever no fresh value
+is found; a setpoint or estimate is never returned instead. The value is the one the driver reports (the device's
+sensor), not the temperature of the liquid. To wait for a temperature, call it repeatedly from the client.
+
+- `CoolingHeatingPlates.ReadTemperature(Slot)` sends `inhecoMTC_GetTemperature` with `<slot>,,0` and reads the
+  `Device.GetTemperature(...): <tenths of °C>` entry of the driver (docs/cplc_actual_temperature.md). It first checks
+  in `C:\ProgramData\Tecan\VisionX\inhecoMTC.ini` that the driver has GetTemperature as macro5 and the slot enabled.
+  On 2026-11-17 the installed driver configuration had only the first four macros, so this command refuses until
+  GetTemperature is enabled through the driver configuration.
+- `BioShake.ReadTemperature` sends `BioShake_GetTemp` (listed in the BioShake driver's macros). **Not confirmed on the
+  instrument**: no GUI script uses it, so its ExecutionSettings and the log line carrying its value are unknown. They
+  are kept as three constants at the top of `src/unitelabs/tecan_fluent/io/bioshake/temperature.py`:
+  `GET_TEMP_SETTINGS` (sent as an empty `<ExecutionSettings />` for now), `TEMPERATURE_LINE` (the log line, a regular
+  expression with a `value` group; unset, so no value is ever returned) and `VALUE_SCALE`. Until they are filled in,
+  the command still sends the macro but fails, and its error and the operation's record (`bioshake_driver_log`) hold
+  the driver log lines written after the request. To confirm: insert a BioShake_GetTemp statement in a FluentControl
+  method with the GUI (to see its settings dialog and whether it needs an output variable), run it once with the
+  BioShake at a known temperature, and read the BioShake driver's lines in the FluentControl log.
+- `Incubator1` has no read command: its driver (Te-Incubator1) has no macro that reads the temperature.
 
 ### ODTC (combined server and ODTC server)
 

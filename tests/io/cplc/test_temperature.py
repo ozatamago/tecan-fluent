@@ -35,7 +35,8 @@ macro5=inhecoMTC_GetTemperature
 def record(slot=1, value="245", timestamp="2026-11-17 14:00:00.100"):
     return {
         "timestamp": timestamp,
-        "message": f"SlotId: {slot} Int32 Device.GetTemperature(Int32 pSlot=value[i],DateTime pFinishByTime=value[i]): {value}",
+        "message": f"SlotId: {slot} Int32 Device.GetTemperature(Int32 pSlot=value[i],"
+        f"DateTime pFinishByTime=value[i]): {value}",
     }
 
 

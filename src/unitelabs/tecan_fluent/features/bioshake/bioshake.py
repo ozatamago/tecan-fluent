@@ -2,6 +2,8 @@
 
 The macros and the meaning of their values: io/bioshake/macros.py."""
 
+import dataclasses
+
 from unitelabs.cdk import sila
 
 from ...io.bioshake.macros import (
@@ -11,16 +13,31 @@ from ...io.bioshake.macros import (
     bioshake_shake_on_xml,
     bioshake_temp_off_xml,
 )
-from ...io.fluentcontrol.backend import FluentControlBackend
-from ..device_macro import TemperatureSettingFailed, check_range, send_macro
+from ...io.fluentcontrol.backend import BackendError, FluentControlBackend
+from ..device_macro import TemperatureReadingFailed, TemperatureSettingFailed, check_range, send_macro
+
+
+@dataclasses.dataclass
+class BioShakeTemperatureReading(sila.CustomDataType):
+    """A fresh temperature reported by the BioShake driver (the device's own sensor, not the liquid in the plate).
+
+    Args:
+      TemperatureC: Driver-reported temperature in degrees Celsius.
+      LogTimestamp: Fluent PC local time of the log entry with the value; not UTC.
+      Source: The driver macro the value came from.
+    """
+
+    temperature_c: float
+    log_timestamp: str
+    source: str
 
 
 class BioShake(sila.Feature):
     """
     Temperature of the BioShake Q1 (shaker with heating and cooling) on the Fluent 780.
 
-    Setting the temperature does not move anything. LockPlate / UnlockPlate / ShakeOn / ShakeOff MOVE the device.
-    ShakeOn keeps shaking until ShakeOff is sent.
+    Setting or reading the temperature does not move anything. LockPlate / UnlockPlate / ShakeOn / ShakeOff MOVE the
+    device. ShakeOn keeps shaking until ShakeOff is sent.
     """
 
     LOW, HIGH = 4.0, 70.0
@@ -46,6 +63,29 @@ class BioShake(sila.Feature):
         """
         check_range(temperature, self.LOW, self.HIGH, "BioShake")
         await send_macro(self.backend, f"BioShake: SetTemp {temperature:g}", bioshake_set_temp_xml(temperature), status)
+
+    @sila.ObservableCommand(errors=[TemperatureReadingFailed])
+    async def read_temperature(self, *, status: sila.Status) -> BioShakeTemperatureReading:
+        """
+        Read the BioShake's current temperature (sends BioShake_GetTemp; sets nothing and does not move).
+
+        Requires an open run (RunControl.StartRun); it never starts a run itself. The value is taken from
+        FluentControl's log after the request. Fails in dry-run mode and when no fresh value is found; a setpoint or
+        estimate is never returned instead. NOT CONFIRMED ON THE INSTRUMENT YET: until the log format is confirmed it
+        always fails, with the driver log lines written after the request in the error (see the README).
+
+        Returns:
+          Reading: Driver-reported temperature in degrees Celsius and the log entry it came from.
+        """
+        status.update(progress=0.0)
+        try:
+            value = await self.backend.read_bioshake_temperature()
+        except BackendError as exc:
+            raise TemperatureReadingFailed(str(exc)) from None
+        status.update(progress=1.0)
+        return BioShakeTemperatureReading(
+            temperature_c=value["temperature_c"], log_timestamp=value["log_timestamp"], source=value["source"]
+        )
 
     @sila.ObservableCommand(errors=[TemperatureSettingFailed])
     async def temperature_off(self, *, status: sila.Status) -> None:

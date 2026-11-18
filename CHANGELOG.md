@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `CoolingHeatingPlates.ReadTemperature(Slot)`: the driver-reported temperature of a CPLC position, from
+  `inhecoMTC_GetTemperature` and the driver's log entry (docs/cplc_actual_temperature.md). Needs an open run and the
+  driver's GetTemperature macro enabled (it was not on 2026-11-17, so the command refuses until it is).
+- `BioShake.ReadTemperature`: sends `BioShake_GetTemp` in the open run and takes the value from FluentControl's log.
+  Not confirmed on the instrument: the macro's settings and the log line with its value are unknown, kept as
+  constants in io/bioshake/temperature.py; until they are filled in it fails and shows the driver log lines written
+  after the request. `TemperatureReadingFailed` is shared by both read commands. Incubator1 has no read macro.
 - `LiquidHandling.SetNextTipPosition(Rack, Well)`: FluentControl's "Set Available Tips (Worktable)"
   (`SetNextTipPositionStatement`) inside an open run. It marks ONLY the given well as available (checked on the
   instrument 2026-11-18), so it has to be set before every GetTips from that rack.
