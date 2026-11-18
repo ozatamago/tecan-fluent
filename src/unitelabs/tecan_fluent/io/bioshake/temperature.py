@@ -3,24 +3,27 @@
 Like inhecoMTC_GetTemperature (io/cplc/temperature.py) and the ODTC's ReadActualTemperature, a legacy driver macro
 does not return its value to ExecuteCommand: the value can only be taken from FluentControl's log. read_temperature
 notes the Fluent PC time, sends BioShake_GetTemp inside the open run, and then looks in the log lines written after
-that time for the line carrying the value.
+that time for the device's reply.
 
-NOT CONFIRMED ON THE INSTRUMENT YET. No GUI script (01-07, Sub_*) uses BioShake_GetTemp, so there is no template in
-tests/fixtures/gui_macros/, and no log of a BioShake_GetTemp has been read. Three things are therefore unknown, and
-are kept in the constants below so that one check on the instrument is enough to fill them in:
+Checked on the instrument on 2026-11-18 (16:40):
 
-- GET_TEMP_SETTINGS   The ExecutionSettings of BioShake_GetTemp. None sends an empty <ExecutionSettings /> (as
-                      BioShake_ElmLock / ElmUnlock / ShakeOff in the GUI scripts). The driver may instead expect an
-                      output variable, as inhecoMTC_GetTemperature does ("<slot>,,0").
-- TEMPERATURE_LINE    The log line with the value (a regular expression with a group named "value", matched against
-                      "<channel> <message>"). None: the format is unknown, so no value is ever returned.
-- VALUE_SCALE         The factor from the logged number to degrees Celsius (the CPLC driver logs tenths).
+- BioShake_GetTemp with an empty <ExecutionSettings /> runs (SC_ERROR_NONE, no dialog, the run goes on).
+- The driver's own channel (Tecan/Drivers/BioShake) only logs <Response status="OK" />, without the value.
+- The value is in the serial traffic that the Pegasus bridge logs on Tecan/Pegasus/Pegasus/General (Severity
+  "Normal") for the BioShake's port (SystemConfig.ini [BioShake] serialPort=Serial.Port03, logged as "Serial 3"):
 
-Until TEMPERATURE_LINE is set, ReadTemperature still sends the macro (when called) but fails, and the error and the
-operation's record contain the driver log lines written after the request: these are what is needed to fill in the
-constants. No setpoint, cached value or estimate is ever returned instead of a reading.
+    <note>Serial 3 at host .: <clear><color=navy;style=bold>OUT [15]<clear> getTempActual{0D}{0A} <debug>
+    <note>Serial 3 at host .: <clear><color=green;style=bold>IN [11]<clear> 36.993000{0D}{0A}
+
+  The IN line right after the OUT getTempActual line of the same port carries degrees Celsius as a decimal.
+  Other ports are polled every second on the same channel (e.g. "Serial 4", the Inheco incubator: OUT
+  "{0A}2{C7}T00RAT1b", IN "{B2}275{B2}"), so only the port of the BioShake is looked at, and the reading is the first
+  IN that answers a getTempActual of that port after the request.
+
+No setpoint, cached value or estimate is ever returned instead of a reading.
 """
 
+import html
 import re
 import time
 
@@ -29,24 +32,29 @@ from ..fluentcontrol.statements import legacy_macro_xml
 
 GET_TEMP_MACRO = "BioShake_GetTemp"
 GET_TEMP_SETTINGS: str | None = None
-"""UNCONFIRMED: ExecutionSettings of BioShake_GetTemp (None: empty)."""
-TEMPERATURE_LINE: re.Pattern[str] | None = None
-"""UNCONFIRMED: the log line carrying the value, with a group named "value" (None: format unknown)."""
+"""ExecutionSettings of BioShake_GetTemp: empty (checked on the instrument 2026-11-18)."""
 VALUE_SCALE = 1.0
-"""UNCONFIRMED: logged number * VALUE_SCALE = degrees Celsius."""
+"""The reply is in degrees Celsius ("36.993000")."""
+DEFAULT_SERIAL_PORT = 3
+"""Serial port of the BioShake on the Fluent 780 (SystemConfig.ini [BioShake] serialPort=Serial.Port03)."""
 PLAUSIBLE_C = (-10.0, 110.0)
-"""A logged value outside this range is refused (the BioShake Q1 controls 4 to 99 degrees Celsius)."""
+"""A reply outside this range is refused (the BioShake Q1 controls 4 to 99 degrees Celsius)."""
 LOG_WAIT_S = 15.0
-"""How long to keep re-reading the log for the value after the macro returned."""
-SOURCE = "BioShake_GetTemp (driver-reported)"
+"""How long to keep re-reading the log for the reply after the macro returned."""
+SOURCE = "BioShake_GetTemp / getTempActual (driver-reported)"
 TIMESTAMP = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}")
+SERIAL = re.compile(r"Serial (\d+) at host [^:]*: .*?\b(OUT|IN) \[\d+\](?:<clear>)?\s*(.*?)\s*(?:<debug>)?\s*$")
+"""A serial line of the Pegasus bridge: port, direction, data."""
+GET_TEMP_REQUEST = re.compile(r"^getTempActual(?:\{0D\})?(?:\{0A\})?$")
+REPLY_VALUE = re.compile(r"^(-?\d+(?:\.\d+)?)(?:\{0D\})?(?:\{0A\})?$")
 
 LOG_PS1 = r"""
 $d = 'C:\ProgramData\Tecan\LoggingServer\LogFiles'
 # the log switches to a new file every few tens of minutes; read the current one and the one before it
 $files = Get-ChildItem "$d\*.ulf","$d\*.zlf" | Sort-Object LastWriteTime -Descending | Select-Object -First 2
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$out = foreach ($f in $files) {
+# not sorted here: lines of the same millisecond keep the order of the file (OUT before its IN)
+foreach ($f in $files) {
   if ($f.Extension -eq '.zlf') { $z = [System.IO.Compression.ZipFile]::OpenRead($f.FullName); $t = (New-Object System.IO.StreamReader($z.Entries[0].Open())).ReadToEnd(); $z.Dispose() }
   else { $fs = [System.IO.File]::Open($f.FullName,'Open','Read','ReadWrite'); $t = (New-Object System.IO.StreamReader($fs)).ReadToEnd(); $fs.Close() }
   foreach ($m in [regex]::Matches($t, '<Log [^>]*>')) {
@@ -55,18 +63,16 @@ $out = foreach ($f in $files) {
     if ($ts -lt '__SINCE__') { continue }
     $ch = [regex]::Match($tag, 'Channel="([^"]*)"').Groups[1].Value
     $msg = [regex]::Match($tag, 'Message="([^"]{0,600})').Groups[1].Value
-    if ($ch -like '*BioShake*' -or $msg -like '*BioShake*' -or $ch -like '*Legacy*' -or $ch -like '*Application Driver*') {
+    $msg = $msg -replace '&#xD;&#xA;',' ' -replace '&#xA;',' ' -replace '&amp;','&' -replace '&lt;','<' -replace '&gt;','>' -replace '&quot;','"' -replace '\s+',' '
+    if ($ch -like '*BioShake*' -or ($ch -like '*Pegasus*' -and $msg -like '*Serial __PORT__ at host*')) {
       $sv = [regex]::Match($tag, 'Severity="([^"]*)"').Groups[1].Value
-      $msg = $msg -replace '&#xD;&#xA;',' ' -replace '&#xA;',' ' -replace '&amp;','&' -replace '&lt;','<' -replace '&gt;','>' -replace '&quot;','"' -replace '\s+',' '
       $ts + "`t" + $sv + "`t" + $ch + "`t" + $msg
     }
   }
 }
-$out | Sort-Object -Unique
 """  # noqa: E501 - PowerShell sent as is
-"""Log lines (time, severity, channel, message; tab separated) since __SINCE__ (Fluent PC local time) that may carry
-the BioShake driver's reply: lines of channels or messages naming the BioShake, and of the legacy / application
-drivers."""
+"""Log lines (time, severity, channel, message; tab separated) since __SINCE__ (Fluent PC local time): the BioShake
+driver's channel and the Pegasus bridge's serial lines of port __PORT__."""
 
 
 def get_temp_xml() -> str:
@@ -74,67 +80,86 @@ def get_temp_xml() -> str:
     return legacy_macro_xml("BioShake", GET_TEMP_MACRO, GET_TEMP_SETTINGS)
 
 
+def log_script(since: str, port: int) -> str:
+    if type(port) is not int or not 1 <= port <= 99:
+        raise BackendError(f"Invalid BioShake serial port {port!r}")
+    return LOG_PS1.replace("__SINCE__", since).replace("__PORT__", str(port))
+
+
 def log_lines(text: str, since: str) -> list[tuple[str, str, str, str]]:
-    """(time, severity, channel, message) of the lines LOG_PS1 returns, written at or after since, in order."""
-    rows = []
+    """(time, severity, channel, message) of the lines LOG_PS1 returns, written at or after since, in time order
+    (lines of the same millisecond keep their order; duplicates are dropped)."""
+    rows, seen = [], set()
     for raw in text.splitlines():
         parts = raw.split("\t", 3)
         if len(parts) < 4 or not TIMESTAMP.fullmatch(parts[0].strip()) or parts[0].strip() < since:
             continue
-        rows.append(tuple(p.strip() for p in parts))
-    return sorted(rows, key=lambda r: r[0])
+        row = tuple(p.strip() for p in parts)
+        if row not in seen:
+            seen.add(row)
+            rows.append(row)
+    return sorted(rows, key=lambda r: r[0])  # stable
 
 
-def parse_reading(
-    rows: list[tuple[str, str, str, str]],
-    pattern: re.Pattern[str] | None = None,
-    scale: float | None = None,
-) -> dict | None:
-    """The first value after the request (rows from log_lines), or None if no line matches (or the format is unknown).
+def parse_reading(rows: list[tuple[str, str, str, str]], port: int = DEFAULT_SERIAL_PORT) -> dict | None:
+    """The first reply to a getTempActual on the BioShake's serial port in rows (from log_lines), or None if there is
+    none yet.
 
-    Raises BackendError for a matching line whose value is not a number or is implausible: a wrong value is never
-    returned."""
-    pattern = TEMPERATURE_LINE if pattern is None else pattern
-    scale = VALUE_SCALE if scale is None else scale
-    if pattern is None:
-        return None
+    Raises BackendError for a reply that is not a number or is implausible: a wrong value is never returned."""
+    waiting = False
     for stamp, _severity, channel, message in rows:
-        m = pattern.search(f"{channel} {message}")
-        if not m:
+        if "Pegasus" not in channel:
             continue
-        try:
-            value = float(m.group("value")) * scale
-        except (IndexError, ValueError):
-            raise BackendError(f"The BioShake temperature in the log is not a number: {message[:200]}") from None
-        if not PLAUSIBLE_C[0] <= value <= PLAUSIBLE_C[1]:
-            raise BackendError(f"The BioShake temperature in the log is implausible ({value:g} °C): {message[:200]}")
-        return {"temperature_c": round(value, 2), "log_timestamp": stamp, "source": SOURCE, "log_line": message[:300]}
+        for _ in range(3):
+            message = html.unescape(message)
+        m = SERIAL.search(message)
+        if not m or int(m.group(1)) != port:
+            continue
+        direction, data = m.group(2), m.group(3)
+        if direction == "OUT":
+            waiting = bool(GET_TEMP_REQUEST.match(data))
+            continue
+        if not waiting:
+            continue
+        value = REPLY_VALUE.match(data)
+        if not value:
+            raise BackendError(f"The BioShake's reply to getTempActual is not a number: {data[:100]}")
+        celsius = float(value.group(1)) * VALUE_SCALE
+        if not PLAUSIBLE_C[0] <= celsius <= PLAUSIBLE_C[1]:
+            raise BackendError(f"The BioShake's temperature reply is implausible ({celsius:g} °C)")
+        return {
+            "temperature_c": round(celsius, 3),
+            "log_timestamp": stamp,
+            "source": SOURCE,
+            "serial_port": port,
+            "log_line": message[:300],
+        }
     return None
 
 
 def read_temperature(backend, report) -> dict:
-    """Send one BioShake_GetTemp inside the open run and return the value from the log. No retry, no own run."""
+    """Send one BioShake_GetTemp inside the open run and return the reply from the log. No retry, no own run."""
     if backend.config.dry_run:
         raise BackendError("The BioShake temperature cannot be read in dry-run mode; no simulated value is returned")
     if not backend.run_open:
         raise BackendError("ReadTemperature requires an open run (RunControl.StartRun); it never starts a run itself")
+    port = getattr(backend.config, "bioshake_serial_port", DEFAULT_SERIAL_PORT)
     since = backend._pc_now()
     if not TIMESTAMP.fullmatch(since):
         raise BackendError(
             "Cannot read the Fluent PC time before the request, so a fresh reply could not be told apart"
         )
+    script = log_script(since, port)
     found: dict = {}
 
     def collect() -> dict:
         deadline = time.monotonic() + LOG_WAIT_S
         rows: list = []
         while True:
-            text = backend.preflight.pc.run_ps(LOG_PS1.replace("__SINCE__", since), 120).decode(
-                "utf-8-sig", errors="replace"
-            )
+            text = backend.preflight.pc.run_ps(script, 120).decode("utf-8-sig", errors="replace")
             rows = log_lines(text, since)
             try:
-                value = parse_reading(rows)
+                value = parse_reading(rows, port)
             except BackendError as exc:
                 found["error"] = str(exc)
                 return {"bioshake_read_error": str(exc)}
@@ -151,7 +176,7 @@ def read_temperature(backend, report) -> dict:
     backend._run_steps(
         [("BioShake: GetTemp", get_temp_xml())],
         report,
-        extra={"read_only_device_command": True, "bioshake_log_format_confirmed": TEMPERATURE_LINE is not None},
+        extra={"read_only_device_command": True, "bioshake_serial_port": port},
         post=collect,
     )
     if "temperature_c" in found:
@@ -161,10 +186,8 @@ def read_temperature(backend, report) -> dict:
     lines = found.get("driver_log")
     if lines is None:
         raise BackendError("BioShake_GetTemp was sent but FluentControl's log could not be read; see the record")
-    what = (
-        "The log line carrying the BioShake temperature is not known yet (io/bioshake/temperature.py, TEMPERATURE_LINE)"
-        if TEMPERATURE_LINE is None
-        else "No BioShake temperature was found in FluentControl's log after the request"
+    shown = " | ".join(lines[-12:]) if lines else "(no line was written)"
+    raise BackendError(
+        f"No reply to getTempActual on serial port {port} was found in FluentControl's log after the request "
+        f"(check fluent.bioshake_serial_port). Log lines since {since}: {shown}"[:4000]
     )
-    shown = " | ".join(lines[-12:]) if lines else "(no driver log line was written)"
-    raise BackendError(f"{what}. Driver log lines since {since}: {shown}"[:4000])

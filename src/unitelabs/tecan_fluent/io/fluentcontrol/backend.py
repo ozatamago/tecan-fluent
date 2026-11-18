@@ -103,6 +103,9 @@ class FluentBackendConfig(Config):
     """Location of the reader script (scripts/windows/odtc_last_sensor_values.ps1) on the Fluent PC."""
     cplc_driver_ini: str = r"C:\ProgramData\Tecan\VisionX\inhecoMTC.ini"
     """Active INHECO legacy driver configuration; read-only prerequisite check for ReadTemperature."""
+    bioshake_serial_port: int = 3
+    """Serial port of the BioShake (SystemConfig.ini [BioShake] serialPort=Serial.Port03). BioShake.ReadTemperature
+    takes the reply from the Pegasus bridge's log lines of this port ("Serial 3 at host ...")."""
     channel_timeout_s: float = 300.0
     finish_timeout_s: float = 180.0
     api_channel: str = "ofml"

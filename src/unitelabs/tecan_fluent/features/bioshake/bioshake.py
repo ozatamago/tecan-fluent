@@ -69,10 +69,10 @@ class BioShake(sila.Feature):
         """
         Read the BioShake's current temperature (sends BioShake_GetTemp; sets nothing and does not move).
 
-        Requires an open run (RunControl.StartRun); it never starts a run itself. The value is taken from
-        FluentControl's log after the request. Fails in dry-run mode and when no fresh value is found; a setpoint or
-        estimate is never returned instead. NOT CONFIRMED ON THE INSTRUMENT YET: until the log format is confirmed it
-        always fails, with the driver log lines written after the request in the error (see the README).
+        Requires an open run (RunControl.StartRun); it never starts a run itself. The value is the device's reply to
+        getTempActual on its serial port, taken from FluentControl's log after the request (fluent.bioshake_serial_port,
+        default 3). Fails in dry-run mode and when no fresh reply is found; a setpoint or estimate is never returned
+        instead. To wait for a temperature, call it repeatedly.
 
         Returns:
           Reading: Driver-reported temperature in degrees Celsius and the log entry it came from.

@@ -419,7 +419,7 @@ worktable (empty: `fluent.definitions.workspace`) and how long a reading is kept
 | Feature | Command | Range (as restricted by the connector) |
 |---|---|---|
 | `BioShake` | `SetTemperature(Temperature)` / `TemperatureOff` | 4–70 °C |
-| | `ReadTemperature` -> `Reading` (`TemperatureC`, `LogTimestamp`, `Source`) | in an open run; **not confirmed yet**, see below |
+| | `ReadTemperature` -> `Reading` (`TemperatureC`, `LogTimestamp`, `Source`) | in an open run, see below |
 | | `LockPlate` / `UnlockPlate` | |
 | | `ShakeOn(Speed)` / `ShakeOff` | 1000, 1200, 1400, 1600, 1800 or 2000 rpm |
 | `ShakingIncubator` (Inheco Incubator Shaker DWP) | `SetTemperature(Temperature)` | 20–60 °C |
@@ -455,15 +455,15 @@ sensor), not the temperature of the liquid. To wait for a temperature, call it r
   in `C:\ProgramData\Tecan\VisionX\inhecoMTC.ini` that the driver has GetTemperature as macro5 and the slot enabled.
   On 2026-11-17 the installed driver configuration had only the first four macros, so this command refuses until
   GetTemperature is enabled through the driver configuration.
-- `BioShake.ReadTemperature` sends `BioShake_GetTemp` (listed in the BioShake driver's macros). **Not confirmed on the
-  instrument**: no GUI script uses it, so its ExecutionSettings and the log line carrying its value are unknown. They
-  are kept as three constants at the top of `src/unitelabs/tecan_fluent/io/bioshake/temperature.py`:
-  `GET_TEMP_SETTINGS` (sent as an empty `<ExecutionSettings />` for now), `TEMPERATURE_LINE` (the log line, a regular
-  expression with a `value` group; unset, so no value is ever returned) and `VALUE_SCALE`. Until they are filled in,
-  the command still sends the macro but fails, and its error and the operation's record (`bioshake_driver_log`) hold
-  the driver log lines written after the request. To confirm: insert a BioShake_GetTemp statement in a FluentControl
-  method with the GUI (to see its settings dialog and whether it needs an output variable), run it once with the
-  BioShake at a known temperature, and read the BioShake driver's lines in the FluentControl log.
+- `BioShake.ReadTemperature` sends `BioShake_GetTemp` with an empty `<ExecutionSettings />` (run on the instrument on
+  2026-11-18: SC_ERROR_NONE, no dialog, the run goes on). The driver's channel (`Tecan/Drivers/BioShake`) logs only
+  `<Response status="OK" />`; the value is in the serial traffic the Pegasus bridge logs on
+  `Tecan/Pegasus/Pegasus/General` for the BioShake's port (`SystemConfig.ini` `[BioShake] serialPort=Serial.Port03`,
+  logged as `Serial 3`): `OUT [n] getTempActual{0D}{0A}` followed by `IN [n] 36.993000{0D}{0A}` (°C). The reading is
+  the first IN on that port that answers a getTempActual after the request; other ports polled on the same channel
+  are ignored. The port is `fluent.bioshake_serial_port` in the configuration (default 3).
+- The same Pegasus channel also shows the Inheco incubator's polling (`Serial 4`): `T00RAT1` is answered with
+  `{B2}275{B2}` (actual 27.5 °C) and `T00RTT` with `200` (target 20.0 °C). There is no command for it yet.
 - `Incubator1` has no read command: its driver (Te-Incubator1) has no macro that reads the temperature.
 
 ### ODTC (combined server and ODTC server)
