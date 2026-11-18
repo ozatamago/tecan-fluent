@@ -89,7 +89,7 @@ class Deck(sila.Feature):
 
         Each move is checked as every RGA command checks it before it is sent: any part of the RGA (fingers, gripper
         blocks, rotator, pillar) and the carried labware must stay at least the margin (setting
-        fluent.rga_clearance.margin_mm, 5 mm) away from everything on the deck while the RGA goes straight down to the
+        fluent.rga_clearance.margin_mm, 2.5 mm) away from everything on the deck while the RGA goes straight down to the
         grip height and back up to the safe height, at the source and at the destination. FluentControl checks only
         the travel at safe height, not these descents. Each move is applied to a copy of the deck before the next one
         is checked, so a whole run can be checked before it is started.

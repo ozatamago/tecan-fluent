@@ -9,11 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RGA clearance check, second table: every location of the base worktable is in it (61 mm nests with the tip racks
+  and their cover sites, CPLC 1-3, the `_PCR` location groups, hotel 1-9, incubators, ODTC, reader), PCR plates and
+  lids, `ODTC_Lid`, the short tip racks, the POGO and the Magnum FLX; labware kinds come from the FluentControl type
+  names (labels only as a fallback); values from the definitions are marked `derived`. Documented exceptions (one
+  part / obstacle pair at one site, grip mode and kind, reported as `exceptions_applied`): the gripper block over
+  CPLC 2 in the WIDE grip at `Regrip_Pos` (reader transfers validated on the instrument in 2026-08 and 2026-10), so
+  the reader transfers are no longer refused. Default `fluent.rga_clearance.margin_mm` is 2.5 mm (the closest move
+  that passed on the instrument had 3.0 mm).
 - RGA clearance check (io/fluent/rga_clearance.py, data/fluent780_rga_geometry.json): before any RGA transfer is
   sent (`Labware.TransferLabware`, `PutLidOn`, `MoveLabwareToBase`, `PlateTransfer.MoveLabware` / `ReturnLabware`,
   the reader transfers of `PlateHandling`), the vertical moves at the source and the destination are checked against
   the deck (base worktable, deck state and the open run) for every RGA part and the carried labware. Closer than
-  `fluent.rga_clearance.margin_mm` (5 mm) refuses the command with the part, the obstacle, the site and the gap;
+  `fluent.rga_clearance.margin_mm` refuses the command with the part, the obstacle, the site and the gap;
   a transfer the table cannot check (unknown type, site or grip height) is refused too unless
   `fluent.rga_clearance.unknown` is "warn". The result is kept in the operation's record. FluentControl itself does
   not check these descents (2026-11-18: the RGA hit a 1000 ul tip rack). The model reproduces 11 real events
@@ -83,10 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- With the table as it is, the reader transfers (`PlateHandling.MeasurePlate` / `MeasureWorktablePlate`) are refused:
-  with the assumed WIDE grip height at `Regrip_Pos` the gripper block would reach over the CPLC. Measure the WIDE grip
-  and correct the table (README, RGA clearance check). Moves to or from sites not in the table (ODTC, the left tip
-  carriers, ...) are refused until they are added, or with `fluent.rga_clearance.unknown: "warn"`.
 - **Breaking: feature identifiers are device first** (`docs/device_naming_spec.md`). Every feature sets its category,
   identifier and display name explicitly, e.g. `jp.riken.bdr/fluent/RunController/v1` ->
   `jp.riken.bdr/tecan.fluent/RunControl/v1` "Fluent - Run (Start / End)". The full old -> new table is in

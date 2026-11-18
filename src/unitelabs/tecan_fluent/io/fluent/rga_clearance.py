@@ -44,8 +44,9 @@ class RgaClearanceConfig(Config):
 
     enabled: bool = True
     """Check every RGA transfer against the deck before it is sent (False: no check at all)."""
-    margin_mm: float = 5.0
-    """A transfer is refused when any RGA part or the carried labware comes closer than this to anything (mm)."""
+    margin_mm: float = 2.5
+    """A transfer is refused when any RGA part or the carried labware comes closer than this to anything (mm). The
+    closest move that passed on the instrument had 3.0 mm in the model (2026-11-18 13:08)."""
     unknown: str = "refuse"
     """What to do with a transfer that cannot be checked (labware type, site or grip height not in the table, or the
     deck could not be read): "refuse" (default; an unchecked descent is what hit the tip rack on 2026-11-18) or "warn"
@@ -83,6 +84,8 @@ class Site:
     modelled: bool
     surface_z: float
     grip_mode: str = ""
+    own_fixed: tuple = ()
+    """Fixed objects that belong to the site itself (its nest, the device it is on): left out at this site."""
 
     @property
     def name(self) -> str:
@@ -106,6 +109,7 @@ class Geometry:
         self.rules = [r for r in data["kind_rules"] if "kind" in r]
         self.footprint = data["footprint"]
         self.grips = data["grips"]
+        self.exceptions = data.get("exceptions", [])
 
     @classmethod
     def load(cls, path: str | pathlib.Path = "") -> Geometry:
@@ -120,6 +124,10 @@ class Geometry:
         if s is None:
             return None
         c = self.classes[s["class"]]
+        own = [*c.get("own_fixed", []), *s.get("own_fixed", [])]
+        nest_of = s.get("same_as") or f"{location}[{int(site)}]"  # a second location group on the same place
+        if c.get("nest"):
+            own.append(nest_name(c["nest"], nest_of))
         return Site(
             location,
             int(site),
@@ -129,7 +137,20 @@ class Geometry:
             bool(c.get("modelled", True)),
             float(c.get("surface_z", 0.0)),
             c.get("grip_mode", ""),
+            tuple(own),
         )
+
+    def exceptions_for(self, site: Site, mode: str, kind: str) -> list[dict]:
+        """The documented exceptions (part / obstacle pairs not counted) for a grip at this site."""
+        return [
+            e
+            for e in self.exceptions
+            if e["site"] == site.name
+            and e["mode"] == mode
+            and kind in e["kinds"]
+            and e.get("part")
+            and e.get("obstacle")
+        ]
 
     def kind_of(self, label: str, labware_type: str) -> str | None:
         for rule in self.rules:
@@ -146,7 +167,7 @@ class Geometry:
         return None
 
     def fixed(self) -> list[Box]:
-        """The fixed objects, and the 7 mm nests of the sites that have one."""
+        """The fixed objects, and the nests of the sites that have one."""
         out = [
             Box(*f["x"], *f["y"], *f["z"], f["name"], bool(f.get("unknown"))) for f in self.data["fixed"] if "name" in f
         ]
@@ -155,15 +176,16 @@ class Geometry:
                 continue
             for number, s in sites.items():
                 nest = self.classes[s["class"]].get("nest")
-                if nest and number != "*":
+                if nest and number != "*" and not s.get("same_as"):
                     x, y = s["x"], s["y"]
                     hx, hy = nest["half_x"], nest["half_y"]
-                    out.append(Box(x - hx, x + hx, y - hy, y + hy, 0.0, nest["top"], nest_name(location, int(number))))
+                    name = nest_name(nest, f"{location}[{int(number)}]")
+                    out.append(Box(x - hx, x + hx, y - hy, y + hy, 0.0, nest["top"], name))
         return out
 
 
-def nest_name(location: str, site: int) -> str:
-    return f"7 mm nest {location}[{site}]"
+def nest_name(nest: dict, site: str) -> str:
+    return f"{nest.get('name', 'nest')} {site}"
 
 
 def rga_boxes(geo: Geometry, x: float, y: float, c: float, g: float) -> list[Box]:
@@ -209,6 +231,8 @@ class Worst:
     tcp_z: float | None = None
     unknown: list = dataclasses.field(default_factory=list)
     """Names of obstacles of unknown height that a part passes over."""
+    excepted: list = dataclasses.field(default_factory=list)
+    """Documented exceptions that applied: {"part", "obstacle", "gap_mm", "reason"}."""
 
     def take(self, gap: float, part: str, obstacle: str, z: float) -> None:
         if self.gap is None or gap < self.gap:
@@ -227,8 +251,12 @@ def vertical_check(
     obstacles: list[Box],
     exclude: set = frozenset(),
     carry_name: str = "labware",
+    exceptions: list = (),
 ) -> Worst:
-    """The smallest gap while the TCP goes straight from z0 to z1 at (x, y) with rotation c and gripper width g."""
+    """The smallest gap while the TCP goes straight from z0 to z1 at (x, y) with rotation c and gripper width g.
+    exceptions: documented part / obstacle pairs ({"part", "obstacle", "reason"}) that are not counted (and are
+    reported in Worst.excepted)."""
+    excepted = {(e["part"], e["obstacle"]): e for e in exceptions}
     parts = rga_boxes(geo, x, y, c, g)
     if carry is not None:
         parts.append(carried_box(geo, x, y, carry, carry_name))
@@ -243,6 +271,13 @@ def vertical_check(
             if ob.unknown:
                 if ob.name not in worst.unknown:
                     worst.unknown.append(ob.name)
+                continue
+            e = excepted.get((part.name, ob.name))
+            if e is not None:
+                if not any((x["part"], x["obstacle"]) == (part.name, ob.name) for x in worst.excepted):
+                    worst.excepted.append(
+                        {"part": part.name, "obstacle": ob.name, "gap_mm": round(hit[0], 1), "reason": e["reason"]}
+                    )
                 continue
             worst.take(hit[0], part.name, ob.name, hit[1])
     return worst
@@ -379,6 +414,8 @@ class End:
             )
             if self.worst.unknown:
                 out["unknown_obstacles"] = self.worst.unknown
+            if self.worst.excepted:
+                out["exceptions_applied"] = self.worst.excepted
         return out
 
 
@@ -524,16 +561,24 @@ def check_transfer(geo: Geometry, snap: Snapshot, label: str, dest: Destination,
             continue
         end.grip_z, end.grip_status = float(grip["z"]), grip.get("status", "")
         boxes, _ = obstacles(geo, state)
-        exclude = {f"{lab} at {site.name}" for lab in [label, *below]} | {nest_name(site.location, site.site)}
-        exclude |= set(geo.classes[site.cls].get("own_fixed", []))
+        exclude = {f"{lab} at {site.name}" for lab in [label, *below]} | set(site.own_fixed)
+        allowed = geo.exceptions_for(site, mode, kind)
         c, g_open = geo.modes[mode]["C"], geo.modes[mode]["G_open"]
         # empty fingers (open) on the way down at the source and up at the destination; holding the labware the other
         # way; both are checked at both ends
         for g, load in ((g_open, None), (float(grip["G"]), carry)):
-            w = vertical_check(geo, site.x, site.y, end.grip_z, geo.safe_z, c, g, load, boxes, exclude, label)
+            w = vertical_check(geo, site.x, site.y, end.grip_z, geo.safe_z, c, g, load, boxes, exclude, label, allowed)
             if w.gap is not None:
                 end.worst.take(w.gap, w.part, w.obstacle, w.tcp_z)
             end.worst.unknown += [u for u in w.unknown if u not in end.worst.unknown]
+            for x in w.excepted:
+                if not any((y["part"], y["obstacle"]) == (x["part"], x["obstacle"]) for y in end.worst.excepted):
+                    end.worst.excepted.append(x)
+        for x in end.worst.excepted:
+            result.notes.append(
+                f"exception applied at the {where} {site.name}: {x['part']} - {x['obstacle']} "
+                f"({x['gap_mm']:g} mm in the model) not counted: {x['reason']}"
+            )
         if end.worst.gap is not None and end.worst.gap < margin:
             result.collisions.append(
                 f"at the {where} {site.name} the RGA's {end.worst.part} would come {_gap_text(end.worst.gap)}: "

@@ -100,7 +100,7 @@ def test_the_check_goes_into_the_record_of_an_operation():
     _live(backend, deck(**{"Rack1000[001]": {"site": 1}}))
     step = ("RGA PlateB_Lid[001] -> HotelMP_Pos[3]", transfer_xml("PlateB_Lid[001]", "HotelMP_Pos", 3))
     record = backend._check_clearance([step], "x")
-    assert record["checked"] is True and record["margin_mm"] == 5.0
+    assert record["checked"] is True and record["margin_mm"] == 2.5
     [transfer] = record["transfers"]
     assert transfer["verdict"] == "ok" and transfer["ends"][0]["gap_mm"] > 5
     assert backend._check_clearance([("other", add_labware_xml("T", "X[001]", "Nest7mm_Pos", 1))], "x") is None
@@ -141,9 +141,9 @@ def test_labware_commands_are_refused_with_their_own_error(tmp_path):
 
 
 def test_measuring_a_worktable_plate_is_refused_with_its_own_error(tmp_path):
-    f, backend, _ = _features(
-        tmp_path, deck(**{FLAT: {"type": "96 Well Flat_Custom", "location": "Nest7mm_Pos", "site": 6}})
-    )
+    # the lidded rack on N1: under the RGA body when the WIDE grip goes down at the regrip position (C=90)
+    flat = {"type": "96 Well Flat_Custom", "location": "Nest7mm_Pos", "site": 6}
+    f, backend, _ = _features(tmp_path, deck(**{FLAT: flat, "Rack1000[001]": {"site": 1}}))
     reader = f["PlateHandling"].reader
 
     async def method_found(_method):
@@ -152,15 +152,26 @@ def test_measuring_a_worktable_plate_is_refused_with_its_own_error(tmp_path):
     reader.check_method = method_found
     with pytest.raises(ReaderOperationFailed, match=r"Regrip_Pos\[1\]") as caught:
         asyncio.run(f["PlateHandling"].measure_worktable_plate(FLAT, "OFML_Abs405.mth", status=STATUS))
-    assert "(assumed)" in str(caught.value)  # the WIDE grip height at the regrip position is not verified
+    assert "Rack1000[001] at Nest7mm_Pos[1]" in str(caught.value) and "(derived)" in str(caught.value)
     assert sent(backend) == []
+
+
+def test_a_reader_transfer_passes_with_the_cplc_exception_recorded():
+    backend = FluentControlBackend(FluentBackendConfig())
+    flat = {"type": "96 Well Flat_Custom", "location": "Regrip_Pos", "site": 1}
+    _live(backend, deck(**{FLAT: flat, "Rack1000[001]": {"site": 7}}))
+    record = backend._check_clearance([("RGA", transfer_xml(FLAT, "InfiniteM200_New", 1))], "x")
+    [transfer] = record["transfers"]
+    assert transfer["verdict"] == "ok"
+    [applied] = transfer["ends"][0]["exceptions_applied"]
+    assert applied["obstacle"] == "CPLC 2 (Inheco CPLC Flat)" and "exception applied" in transfer["notes"][0]
 
 
 def test_a_transfer_to_a_site_not_in_the_table_is_refused_unless_set_to_warn():
     backend = FluentControlBackend(FluentBackendConfig())
     _live(backend, deck())
-    step = ("RGA", transfer_xml("PlateB[001]", "ODTC_96_Pos", 1))
-    with pytest.raises(BackendError, match=r"cannot check .*destination ODTC_96_Pos\[1\]"):
+    step = ("RGA", transfer_xml("PlateB[001]", "Alpaqua_Magnum_FLX_Pos", 1))
+    with pytest.raises(BackendError, match=r"cannot check .*destination Alpaqua_Magnum_FLX_Pos\[1\]"):
         backend._run_steps([step], lambda _: None)
     assert sent(backend) == []
     backend.config.rga_clearance.unknown = "warn"
@@ -238,11 +249,11 @@ def test_deck_check_rga_moves(tmp_path):
                 "PlateB_Lid[001]: 96Microplate_CoverSite_4[1] -> HotelMP_Pos[3]",
                 "Rack1000[001] (FCA, 1000ul SBS): Nest7mm_Pos[1] -> Nest7mm_Pos[1]",
                 "PlateB_Lid[001] -> lid of PlateB[001]",
-                "PlateB[001] -> ODTC_96_Pos[1]",
+                "PlateB[001] -> Alpaqua_Magnum_FLX_Pos[1]",
             ]
         )
     )
     assert out[0].startswith("1. PlateB_Lid[001]") and "REFUSED" in out[0] and "gripper block" in out[0]
     assert "note: the deck has Rack1000[001] at Nest7mm_Pos[5]" in out[1]
     assert out[2].startswith("3.") and ": OK, smallest gap" in out[2]
-    assert "NOT CHECKED" in out[3] and "ODTC_96_Pos[1]" in out[3]
+    assert "NOT CHECKED" in out[3] and "Alpaqua_Magnum_FLX_Pos[1]" in out[3]

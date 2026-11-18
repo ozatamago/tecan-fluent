@@ -350,9 +350,9 @@ So the backend checks **every RGA transfer before anything is sent** (`Labware.T
   are left out. Each transfer of a statement list is checked against the deck the transfers before it leave.
 - A transfer is **refused** (the feature's own error, e.g. `PlateTransferFailed`, `LabwareCommandFailed`,
   `ReaderOperationFailed`; nothing is sent, no run is started) when any part comes closer than
-  `fluent.rga_clearance.margin_mm` (5 mm) to anything. The message names the part, the obstacle, the site and the
-  gap, e.g. "at the source Nest7mm_Pos[2] the RGA's gripper block would come 55.4 mm into it:
-  Rack1000[001] at Nest7mm_Pos[5] (TCP Z 14.7, grip Z 14.7 (measured), margin 5 mm)".
+  `fluent.rga_clearance.margin_mm` (2.5 mm; the closest move that passed on the instrument had 3.0 mm) to
+  anything. The message names the part, the obstacle, the site and the gap, e.g. "at the source Nest7mm_Pos[2] the RGA's gripper block would come 55.4 mm into it:
+  Rack1000[001] at Nest7mm_Pos[5] (TCP Z 14.7, grip Z 14.7 (measured), margin 2.5 mm)".
 - A transfer that **cannot be checked** is refused as well (`fluent.rga_clearance.unknown: "refuse"`, the default):
   a labware type, source, destination or grip height (per labware kind, site class, what it stands on and grip mode)
   that is not in the table, an obstacle of unknown type in reach of the RGA, or a deck that could not be read. With
@@ -361,7 +361,14 @@ So the backend checks **every RGA transfer before anything is sent** (`Labware.T
 - The result of the check goes into the record of the operation (`rga_clearance` in its manifest); a refusal is
   recorded in `OFML\records\rga_clearance\<time>_refused.json`.
 - Not checked: the horizontal travel at safe height (left to FluentControl's path planner) and the inside of the
-  hotel, the incubator and the reader (not modelled; those moves were validated on the instrument).
+  hotel, the incubators, the ODTC and the reader (not modelled: the RGA enters them sideways on taught paths; those
+  moves were validated on the instrument). The other end of such a transfer is checked as usual.
+- **Exceptions** are listed in the table (`exceptions`), each a single part / obstacle pair at one site, grip mode
+  and labware kind with its justification, and reported in the result (`exceptions_applied`, and a note in the line
+  of `CheckRgaMoves`). There is one: the WIDE grip of a flat plate at `Regrip_Pos[1]` (the reader transfers,
+  C=90) does not count the gripper block against the box of CPLC 2, which the model finds 29 mm deep: the reader
+  transfers through the regrip position ran on the instrument in 2026-08 and 2026-10, so the CPLC box of the
+  PathFinder dump is larger than the device at that corner. Every other part and obstacle of that grip is checked.
 - `Deck.CheckRgaMoves(Moves)` runs the same check for a whole planned sequence against the current deck, applying
   each move to a copy of the deck, and returns one line per move ("OK" with the smallest gap, "REFUSED" or
   "NOT CHECKED" with the reason). It moves nothing and needs no FluentControl run. A move is
@@ -369,38 +376,51 @@ So the backend checks **every RGA transfer before anything is sent** (`Labware.T
   `lid of <plate>`; `"label (type): source -> destination"` for labware that is not on the deck. Without the Fluent
   PC: `python -m unitelabs.tecan_fluent.io.fluent.rga_clearance layout.json moves.txt` (layout: label ->
   `{"type", "location", "site", "on"}`).
-- Settings (`fluent.rga_clearance`): `enabled` (true), `margin_mm` (5.0), `unknown` ("refuse" or "warn"),
+- Settings (`fluent.rga_clearance`): `enabled` (true), `margin_mm` (2.5), `unknown` ("refuse" or "warn"),
   `geometry_file` (empty: the table that comes with the connector). The table describes the deck of worktable
   `WT2411004293_Ver.0.5_OFML`; on any other worktable (`fluent.definitions.workspace`) the check refuses rather than
   apply its positions.
 
 **The table** is `src/unitelabs/tecan_fluent/data/fluent780_rga_geometry.json`: RGA part boxes, the sites (location
-and site -> TCP position and class: `nest7mm`, `regrip`, `cplc`, `bioshake`, `hotel`, `incubator`, `reader`), the
-fixed objects, the object heights per labware kind (with and without lid), the rules from labware type or label to
-kind, and the grip heights and widths per kind, site class, what it stands on and grip mode (NARROW C=180, open
-89.5 mm; WIDE C=90, 131.8 mm, used for the reader). Positions and grip heights are from FluentControl's RGA log of
-2026-11-18, the parts from its PathFinder dump; every value is marked `measured`, `estimated` or `assumed`. The model
+and site -> TCP position and class), the fixed objects, the object heights per labware kind (with and without lid),
+the rules from FluentControl labware type to kind (labels only as a fallback), the grip heights and widths per kind,
+site class, what it stands on and grip mode (NARROW C=180, open 89.5 mm; WIDE C=90, 131.8 mm, used for the reader),
+and the exceptions. It covers every location of the base worktable: `Nest7mm_Pos` 1-7, `Regrip_Pos` (and
+`Regrip_Pos_PCR`), `Nest61mm_Pos_1` 1-15 (the tip racks and their cover sites `FCA*ulSBS_CoverSite`), `CPLC_Flat_Pos`
+1-3 (and `CPLC_Flat_Pos_PCR`), `BioShake_Q1_Adapter_Site` (and `_PCR`), and, not modelled inside, `HotelMP_Pos`
+1-9, `Incub6Shake_Pos` 1-6, `IncDWP_Pos_4`, `ODTC_96_Pos` and `InfiniteM200_New`. Kinds: flat and skirted PCR plates
+and their lids (`Lid_9mm_Custom`, `Lid_6mm`), the trough and its lid (`Lid_9mm`), the 1000 ul and the 10 / 50 /
+200 ul tip racks and their lids (`Lid_DiTiFCA`), `ODTC_Lid`, the POGO and the Magnum FLX. Sources: FluentControl's
+RGA log of 2026-11-17/18 (positions, grip heights), its PathFinder dump (RGA parts, deck object boxes; layout of
+2025-05) and its definitions (the base worktable, the taught paths of the site templates, component sizes); every
+value is marked `measured`, `derived` (computed from the definitions, not yet observed), `estimated` or `assumed`. The model
 reproduces 11 real events of 2026-11-17/18 (5 collisions with negative gaps, 6 clear moves with positive gaps, the
 closest 3.0 mm); they are regression tests (`tests/io/fluent/test_rga_clearance.py`).
 
 **Not verified on the instrument** (assumed or estimated in the table):
 
 - The height of the open tube caps above the POGO (assumed top 160 mm).
-- The WIDE grip height at `Regrip_Pos` (assumed 9.1 mm, as the NARROW approach; the WIDE move of 16:32 was refused
-  by FluentControl at Z 64). With it the model finds the gripper block of the WIDE grip about 10 mm (in X) over the
-  CPLC (slot 2), 29 mm below its top, so **the reader transfers (`MeasurePlate`, `MeasureWorktablePlate`) are
-  refused until the WIDE grip is measured** and the table corrected (or the check is turned off for them).
-- The grip height of a plate lid on a plate on the CPLC (`CPLC_Flat_Pos[3]`, assumed 81.6 mm, FluentControl's taught
-  path, not run yet).
+- The WIDE grip height at `Regrip_Pos` (derived 9.0 mm: the site's Wide path plus the 2 mm offset of the reader
+  route; its approach point, Z 64, is what FluentControl logged on 2026-11-18 16:32).
+- Grip heights derived from the definitions and not yet observed: PCR plates (the same site paths as the flat plate;
+  `Regrip_Pos_PCR` 8.4, `CPLC_Flat_Pos_PCR` 74.4, `BioShake_Q1_Adapter_Site_PCR` 87.1), a tip rack lid on a 1000 ul
+  rack on a 61 mm nest (158.1), on its own on a 61 mm nest (64.1), on a short rack on a 7 mm nest (65.0); the lid of
+  a PCR plate (22.0, on the CPLC 88.9) is estimated from the lid seat in the PathFinder dump.
+- Positions not observed: `Nest61mm_Pos_1` 1, 6, 9-15 (from the order of the worktable and the spacing of the dump),
+  `CPLC_Flat_Pos[1]` (extrapolated from sites 2 and 3; the POGO stands there), the `_PCR` location groups (the same
+  place as their counterparts, offset by the taught waypoints).
+- The height of the open tube caps above the POGO (assumed top 160 mm).
 - Object tops estimated from grip heights and definitions: plate with lid 21 mm (plate 18.5), trough 48 / with lid
-  50, a lid lying on its own on a nest 22, the 1000 ul rack 110 / with lid 116 (from FluentControl's own collision
-  report); all on a 7 mm nest.
-- The hotel and incubator interiors (and the reader) are not modelled.
+  50, a trough lid lying on its own 22, a plate lid on its own 16 (9 mm lid), the 1000 ul rack 110 / with lid 116
+  (FluentControl's own collision report), all on a 7 mm nest; the 10 / 50 / 200 ul racks 65 / with lid 71 above
+  their nest; a PCR plate 15.7 / with lid 18.3.
+- The deck object boxes of the PathFinder dump are from 2025-05. The Inheco DWP incubator and the centrifuge are left
+  out (the RGA moved through that space at `Nest7mm_Pos` 4-7 on 2026-11-17/18). The dump has the Magnum FLX in
+  front of the left 7 mm column, the base worktable on `Nest61mm_Pos_1[15]`: both are modelled.
+- The hotel, incubator, ODTC and reader interiors are not modelled.
 - The horizontal travel at safe height is left to FluentControl's path planner.
-- What stands on the front right 7 mm nest (X 984, Y 85) is not known; it is modelled as an empty nest.
-- The FluentControl types of the colour-water labware (plates A/B, culture plate, lids) were not available; they
-  are matched by label (`kind_rules`). The tip racks of 50 and 200 ul on the left of the deck and their lids are not
-  in the table (their location names are not known), so moves of those lids are refused as not checkable.
+- Nothing stands in front of the right 7 mm column (X 984, Y 85) on the base worktable; anything put there by hand is
+  not seen.
 
 ### Deck state and hands-off (combined server and Fluent server)
 

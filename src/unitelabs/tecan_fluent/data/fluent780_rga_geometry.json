@@ -3,132 +3,1204 @@
   "Geometry for the RGA clearance check of the RIKEN BDR Fluent 780 (io/fluent/rga_clearance.py). Millimetres, deck",
   "coordinates of FluentControl (X to the right, Y to the back, Z up). Positions are TCP (tool centre point) positions",
   "of the RGA: the point between the finger tips at the grip height.",
-  "How the numbers were obtained (2026-11-18):",
-  "- RGA parts: from the collision model FluentControl's PathFinder dumps for the RGA (X3D of the fingers, the gripper",
-  "  assembly blocks, the rotator and the pillar), expressed relative to the TCP. u is the direction from the TCP to the",
-  "  rotation axis (C=180: +X, C=90: -Y), v is u turned by +90 degrees, z is height above the TCP.",
-  "- Site positions, grip heights, C and gripper widths: from the RGA move lines of FluentControl's log",
-  "  (PostPath / PrePath points and 'Move is finished' positions) of the RGA moves of 2026-11-18.",
-  "- Fixed objects: from the PathFinder dump and the worktable, rounded; see the status of each.",
-  "- Object heights: estimated from the grip heights and the labware definitions; the 1000 ul rack from FluentControl's",
-  "  own collision report.",
-  "status: 'measured' = read from the instrument's log or FluentControl's model; 'estimated' = derived from measured",
-  "values; 'assumed' = not verified on the instrument (listed in README, section RGA clearance check).",
+  "Sources (only numbers derived from them are kept here):",
+  "- log: the RGA move lines of FluentControl's log of 2026-11-17 and 2026-11-18 (PostPath / PrePath points, 'Move is",
+  "  finished' positions): site positions, grip heights, C and gripper widths.",
+  "- dump: the collision model FluentControl's PathFinder dumped for the RGA (X3D, layout of 2025-05): the RGA parts",
+  "  (relative to the TCP; u = TCP -> rotation axis, C=180: +X, C=90: -Y; v = u turned by +90 degrees; z above the",
+  "  TCP) and the boxes of the deck objects.",
+  "- definitions: FluentControl's definition files: the base worktable WT2411004293_Ver.0.5_OFML (which carrier and",
+  "  labware stands on which site, the order of the sites), the site templates (taught RobotPaths: approach and grip",
+  "  waypoints per grip type, relative to the site) and the component templates (dimensions).",
+  "- A grip height is the site's reference height plus the last waypoint of its taught path; the reference height is",
+  "  calibrated on a logged grip at that site template. The path belongs to the site, not to the labware, so a plate",
+  "  of another type at the same site is gripped at the same height.",
+  "status: 'measured' = read from the log or the dump; 'derived' = computed from the definitions and calibrated",
+  "values, not yet observed on the instrument; 'estimated' = derived from measured values with a further assumption;",
+  "'assumed' = not verified (listed in README, section RGA clearance check).",
   "Validated against 11 real events (5 collisions, 6 clear moves; tests/io/fluent/test_rga_clearance.py)."
  ],
  "instrument": "Fluent 780 of RIKEN BDR (serial 2411004293)",
- "worktables": ["WT2411004293_Ver.0.5_OFML"],
+ "worktables": [
+  "WT2411004293_Ver.0.5_OFML"
+ ],
  "_worktables": "the check refuses to run on any other worktable (fluent.definitions.workspace): the site positions belong to this deck",
  "safe_z": 150.0,
  "rga": {
   "axis_distance": 152.5,
   "parts": [
-   {"name": "finger", "per_finger": true, "u": [-24.0, 101.0], "v": [-2.5, 2.5], "z": [8.25, 16.25]},
-   {"name": "finger tip", "per_finger": true, "u": [-23.75, 23.75], "v": [-2.5, 2.5], "z": [0.0, 8.5]},
-   {"name": "finger web", "per_finger": true, "u": [91.0, 101.0], "v": [-2.5, 2.5], "z": [16.5, 62.0]},
-   {"name": "finger root", "per_finger": true, "u": [91.0, 141.0], "v": [-2.5, 2.5], "z": [50.75, 61.75]},
-   {"name": "gripper block", "per_finger": true, "u": [110.4, 140.9], "v": [-24.15, 24.15], "z": [45.9, 68.6]},
-   {"name": "rotator", "per_finger": false, "u": [114.6, 190.4], "v": [-59.5, 59.5], "z": [50.75, 85.25]}
+   {
+    "name": "finger",
+    "per_finger": true,
+    "u": [
+     -24.0,
+     101.0
+    ],
+    "v": [
+     -2.5,
+     2.5
+    ],
+    "z": [
+     8.25,
+     16.25
+    ]
+   },
+   {
+    "name": "finger tip",
+    "per_finger": true,
+    "u": [
+     -23.75,
+     23.75
+    ],
+    "v": [
+     -2.5,
+     2.5
+    ],
+    "z": [
+     0.0,
+     8.5
+    ]
+   },
+   {
+    "name": "finger web",
+    "per_finger": true,
+    "u": [
+     91.0,
+     101.0
+    ],
+    "v": [
+     -2.5,
+     2.5
+    ],
+    "z": [
+     16.5,
+     62.0
+    ]
+   },
+   {
+    "name": "finger root",
+    "per_finger": true,
+    "u": [
+     91.0,
+     141.0
+    ],
+    "v": [
+     -2.5,
+     2.5
+    ],
+    "z": [
+     50.75,
+     61.75
+    ]
+   },
+   {
+    "name": "gripper block",
+    "per_finger": true,
+    "u": [
+     110.4,
+     140.9
+    ],
+    "v": [
+     -24.15,
+     24.15
+    ],
+    "z": [
+     45.9,
+     68.6
+    ]
+   },
+   {
+    "name": "rotator",
+    "per_finger": false,
+    "u": [
+     114.6,
+     190.4
+    ],
+    "v": [
+     -59.5,
+     59.5
+    ],
+    "z": [
+     50.75,
+     85.25
+    ]
+   }
   ],
-  "pillar": {"name": "pillar", "x": [-25.0, 25.0], "y": [-27.2, 66.9], "z": [83.25, 700.0],
-             "_note": "world-aligned box around the rotation axis (it does not turn with C)"},
+  "pillar": {
+   "name": "pillar",
+   "x": [
+    -25.0,
+    25.0
+   ],
+   "y": [
+    -27.2,
+    66.9
+   ],
+   "z": [
+    83.25,
+    700.0
+   ],
+   "_note": "world-aligned box around the rotation axis (it does not turn with C)"
+  },
   "status": "measured"
  },
  "grip_modes": {
-  "NARROW": {"C": 180.0, "G_open": 89.5, "status": "measured"},
-  "WIDE": {"C": 90.0, "G_open": 131.8, "status": "measured",
-           "_note": "Regrip_Pos -> InfiniteM200_New, 16:32:46; FluentControl chooses WIDE for the reader"}
+  "NARROW": {
+   "C": 180.0,
+   "G_open": 89.5,
+   "status": "measured"
+  },
+  "WIDE": {
+   "C": 90.0,
+   "G_open": 131.8,
+   "status": "measured",
+   "_note": "Regrip_Pos -> InfiniteM200_New, 16:32:46; FluentControl chooses WIDE for the reader"
+  }
  },
  "site_classes": {
-  "nest7mm": {"modelled": true, "surface_z": 7.0, "nest": {"half_x": 68.6, "half_y": 47.5, "top": 7.0}},
-  "regrip": {"modelled": true, "surface_z": 7.0, "nest": {"half_x": 68.6, "half_y": 47.5, "top": 7.0}},
-  "cplc": {"modelled": true, "surface_z": 73.9, "_note": "plate grip at 74.0 = surface + 0.1, as on a 7 mm nest"},
-  "bioshake": {"modelled": true, "surface_z": 87.8, "own_fixed": ["BioShake"]},
-  "hotel": {"modelled": false, "_note": "interior not modelled; the hotel moves were validated on the instrument"},
-  "incubator": {"modelled": false, "_note": "interior not modelled; validated on the instrument"},
-  "reader": {"modelled": false, "grip_mode": "WIDE", "_note": "interior not modelled; FluentControl uses WIDE"}
+  "nest7mm": {
+   "modelled": true,
+   "surface_z": 7.0,
+   "nest": {
+    "name": "7 mm nest",
+    "half_x": 68.6,
+    "half_y": 47.5,
+    "top": 7.0
+   }
+  },
+  "regrip": {
+   "modelled": true,
+   "surface_z": 7.0,
+   "nest": {
+    "name": "7 mm nest",
+    "half_x": 68.6,
+    "half_y": 47.5,
+    "top": 7.0
+   }
+  },
+  "regrip_pcr": {
+   "modelled": true,
+   "surface_z": 7.0,
+   "nest": {
+    "name": "7 mm nest",
+    "half_x": 68.6,
+    "half_y": 47.5,
+    "top": 7.0
+   },
+   "_note": "Regrip_Pos_PCR: the site template for PCR plates on the same regrip nest (last waypoint 1.4, not 0.1)"
+  },
+  "nest61mm": {
+   "modelled": true,
+   "surface_z": 61.0,
+   "nest": {
+    "name": "61 mm nest",
+    "half_x": 68.65,
+    "half_y": 47.5,
+    "top": 61.0
+   },
+   "_note": "61mm Nest_Custom (definition 137.3 x 95); surface 61 as for the nests in the dump"
+  },
+  "cplc": {
+   "modelled": true,
+   "surface_z": 73.9,
+   "_note": "plate grip at 74.0 = surface + 0.1, as on a 7 mm nest"
+  },
+  "cplc_pcr": {
+   "modelled": true,
+   "surface_z": 73.9,
+   "_note": "CPLC_Flat_Pos_PCR: the PCR site template on the same CPLC positions"
+  },
+  "bioshake": {
+   "modelled": true,
+   "surface_z": 87.8,
+   "own_fixed": [
+    "BioShake"
+   ]
+  },
+  "bioshake_pcr": {
+   "modelled": true,
+   "surface_z": 87.8,
+   "own_fixed": [
+    "BioShake"
+   ],
+   "_note": "BioShake_Q1_Adapter_Site_PCR: the PCR site template on the same adapter"
+  },
+  "hotel": {
+   "modelled": false,
+   "_note": "9 Nest Hotel: the RGA enters sideways at C=90 (slot 2 at Z 217.3, 28 mm per slot, log); interior not modelled; validated on the instrument"
+  },
+  "incubator": {
+   "modelled": false,
+   "_note": "6 Nest Incubator Shaking (entered sideways at C=90, Z 204.4 for site 1, log) and the Inheco DWP incubator: interior not modelled"
+  },
+  "odtc": {
+   "modelled": false,
+   "_note": "Inheco ODTC 96: its taught path slides in horizontally at Z 91 above the site before going down (definitions), which this check does not model; the ODTC transfers were validated on the instrument (2026-10)"
+  },
+  "reader": {
+   "modelled": false,
+   "grip_mode": "WIDE",
+   "_note": "interior not modelled; FluentControl uses WIDE"
+  }
  },
  "sites": {
-  "Regrip_Pos": {"1": {"x": 834.25, "y": 469.3, "class": "regrip"}},
-  "Nest7mm_Pos": {
-   "1": {"x": 834.25, "y": 373.0, "class": "nest7mm"},
-   "2": {"x": 834.25, "y": 277.0, "class": "nest7mm"},
-   "3": {"x": 834.25, "y": 181.0, "class": "nest7mm"},
-   "4": {"x": 984.25, "y": 469.0, "class": "nest7mm"},
-   "5": {"x": 984.25, "y": 373.0, "class": "nest7mm"},
-   "6": {"x": 984.25, "y": 277.0, "class": "nest7mm"},
-   "7": {"x": 984.25, "y": 181.0, "class": "nest7mm"}
+  "Regrip_Pos": {
+   "1": {
+    "x": 834.25,
+    "y": 469.3,
+    "class": "regrip",
+    "status": "measured"
+   }
   },
-  "CPLC_Flat_Pos": {"3": {"x": 684.4, "y": 200.4, "class": "cplc"}},
-  "BioShake_Q1_Adapter_Site": {"1": {"x": 683.8, "y": 85.8, "class": "bioshake"}},
-  "HotelMP_Pos": {"*": {"class": "hotel"}},
-  "Incub6Shake_Pos": {"*": {"class": "incubator"}},
-  "InfiniteM200_New": {"*": {"class": "reader"}},
-  "status": "measured (TCP positions of the grips in FluentControl's log)"
+  "Regrip_Pos_PCR": {
+   "1": {
+    "x": 834.25,
+    "y": 469.3,
+    "class": "regrip_pcr",
+    "same_as": "Regrip_Pos[1]",
+    "status": "derived"
+   }
+  },
+  "Nest7mm_Pos": {
+   "1": {
+    "x": 834.25,
+    "y": 373.0,
+    "class": "nest7mm",
+    "status": "measured"
+   },
+   "2": {
+    "x": 834.25,
+    "y": 277.0,
+    "class": "nest7mm",
+    "status": "measured"
+   },
+   "3": {
+    "x": 834.25,
+    "y": 181.0,
+    "class": "nest7mm",
+    "status": "measured"
+   },
+   "4": {
+    "x": 984.25,
+    "y": 469.0,
+    "class": "nest7mm",
+    "status": "measured"
+   },
+   "5": {
+    "x": 984.25,
+    "y": 373.0,
+    "class": "nest7mm",
+    "status": "measured"
+   },
+   "6": {
+    "x": 984.25,
+    "y": 277.0,
+    "class": "nest7mm",
+    "status": "measured"
+   },
+   "7": {
+    "x": 984.25,
+    "y": 181.0,
+    "class": "nest7mm",
+    "status": "measured"
+   }
+  },
+  "Nest61mm_Pos_1": {
+   "1": {
+    "x": 159.2,
+    "y": 469.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "2": {
+    "x": 159.2,
+    "y": 373.3,
+    "class": "nest61mm",
+    "status": "measured"
+   },
+   "3": {
+    "x": 159.2,
+    "y": 277.3,
+    "class": "nest61mm",
+    "status": "measured"
+   },
+   "4": {
+    "x": 159.2,
+    "y": 181.3,
+    "class": "nest61mm",
+    "status": "measured"
+   },
+   "5": {
+    "x": 159.2,
+    "y": 85.3,
+    "class": "nest61mm",
+    "status": "measured"
+   },
+   "6": {
+    "x": 309.2,
+    "y": 469.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "7": {
+    "x": 309.2,
+    "y": 373.3,
+    "class": "nest61mm",
+    "status": "measured"
+   },
+   "8": {
+    "x": 309.2,
+    "y": 277.3,
+    "class": "nest61mm",
+    "status": "measured"
+   },
+   "9": {
+    "x": 309.2,
+    "y": 181.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "10": {
+    "x": 309.2,
+    "y": 85.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "11": {
+    "x": 509.2,
+    "y": 469.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "12": {
+    "x": 509.2,
+    "y": 373.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "13": {
+    "x": 509.2,
+    "y": 277.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "14": {
+    "x": 509.2,
+    "y": 181.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   },
+   "15": {
+    "x": 509.2,
+    "y": 85.3,
+    "class": "nest61mm",
+    "status": "estimated"
+   }
+  },
+  "CPLC_Flat_Pos": {
+   "1": {
+    "x": 685.6,
+    "y": 430.0,
+    "class": "cplc",
+    "own_fixed": [
+     "CPLC 1 (Inheco CPLC Flat)"
+    ],
+    "status": "estimated",
+    "_note": "the POGO stands here; position extrapolated from sites 2 and 3"
+   },
+   "2": {
+    "x": 685.0,
+    "y": 315.2,
+    "class": "cplc",
+    "own_fixed": [
+     "CPLC 2 (Inheco CPLC Flat)"
+    ],
+    "status": "measured"
+   },
+   "3": {
+    "x": 684.4,
+    "y": 200.4,
+    "class": "cplc",
+    "own_fixed": [
+     "CPLC 3 (Inheco CPLC Flat)"
+    ],
+    "status": "measured"
+   }
+  },
+  "CPLC_Flat_Pos_PCR": {
+   "1": {
+    "x": 687.1,
+    "y": 430.6,
+    "class": "cplc_pcr",
+    "same_as": "CPLC_Flat_Pos[1]",
+    "own_fixed": [
+     "CPLC 1 (Inheco CPLC Flat)"
+    ],
+    "status": "derived"
+   },
+   "2": {
+    "x": 686.5,
+    "y": 315.8,
+    "class": "cplc_pcr",
+    "same_as": "CPLC_Flat_Pos[2]",
+    "own_fixed": [
+     "CPLC 2 (Inheco CPLC Flat)"
+    ],
+    "status": "derived"
+   },
+   "3": {
+    "x": 685.9,
+    "y": 201.0,
+    "class": "cplc_pcr",
+    "same_as": "CPLC_Flat_Pos[3]",
+    "own_fixed": [
+     "CPLC 3 (Inheco CPLC Flat)"
+    ],
+    "status": "derived"
+   }
+  },
+  "BioShake_Q1_Adapter_Site": {
+   "1": {
+    "x": 683.8,
+    "y": 85.8,
+    "class": "bioshake",
+    "status": "measured"
+   }
+  },
+  "BioShake_Q1_Adapter_Site_PCR": {
+   "1": {
+    "x": 683.8,
+    "y": 85.8,
+    "class": "bioshake_pcr",
+    "same_as": "BioShake_Q1_Adapter_Site[1]",
+    "status": "derived"
+   }
+  },
+  "HotelMP_Pos": {
+   "1": {
+    "class": "hotel"
+   },
+   "2": {
+    "class": "hotel"
+   },
+   "3": {
+    "class": "hotel"
+   },
+   "4": {
+    "class": "hotel"
+   },
+   "5": {
+    "class": "hotel"
+   },
+   "6": {
+    "class": "hotel"
+   },
+   "7": {
+    "class": "hotel"
+   },
+   "8": {
+    "class": "hotel"
+   },
+   "9": {
+    "class": "hotel"
+   }
+  },
+  "Incub6Shake_Pos": {
+   "1": {
+    "class": "incubator"
+   },
+   "2": {
+    "class": "incubator"
+   },
+   "3": {
+    "class": "incubator"
+   },
+   "4": {
+    "class": "incubator"
+   },
+   "5": {
+    "class": "incubator"
+   },
+   "6": {
+    "class": "incubator"
+   }
+  },
+  "IncDWP_Pos_4": {
+   "*": {
+    "class": "incubator",
+    "_note": "the Inheco DWP incubator; not a location of WT2411004293_Ver.0.5_OFML"
+   }
+  },
+  "ODTC_96_Pos": {
+   "1": {
+    "class": "odtc"
+   }
+  },
+  "InfiniteM200_New": {
+   "1": {
+    "class": "reader"
+   }
+  },
+  "_note": "TCP positions of the grips. Nest61mm_Pos_1: site k is 61mm Nest_Custom[k] of the base worktable (columns X 159.2 / 309.2 / 509.2, rows Y 469.3 to 85.3 every 96 mm); sites 2-5, 7, 8 measured, the others from the order of the worktable and the spacing in the dump. *_PCR: the same place as the site named in same_as, the TCP offset by the difference of the taught waypoints (definitions)"
  },
  "fixed": [
-  {"name": "POGO with tubes (open caps)", "x": [619.3, 747.1], "y": [387.15, 472.65], "z": [0.0, 160.0],
-   "status": "assumed", "_note": "height of open tube caps above the POGO assumed 160"},
-  {"name": "CPLC slot 2 (empty)", "x": [617.5, 754.7], "y": [260.9, 363.3], "z": [0.0, 84.1], "status": "measured"},
-  {"name": "BioShake", "x": [609.5, 751.5], "y": [29.4, 128.4], "z": [0.0, 84.2], "status": "measured"},
-  {"name": "Magnum FLX (front left)", "x": [770.35, 898.15], "y": [42.65, 128.15], "z": [0.0, 31.0],
-   "status": "measured"},
-  {"name": "Hotel", "x": [759.5, 884.5], "y": [595.5, 745.5], "z": [0.0, 264.0], "status": "measured",
-   "_note": "outside only"},
-  {"name": "Incubator", "x": [899.0, 1029.5], "y": [577.0, 839.0], "z": [11.8, 281.8], "status": "measured",
-   "_note": "outside only"},
-  {"name": "61 mm nests (sites 11-15)", "x": [441.0, 578.0], "y": [30.0, 520.0], "z": [0.0, 61.0],
-   "status": "measured", "_note": "the nests only; labware on them is not modelled"},
-  {"name": "7 mm nest front right (X 984, Y 85)", "x": [915.65, 1052.85], "y": [37.5, 132.5], "z": [0.0, 7.0],
+  {
+   "name": "POGO with tubes (open caps)",
+   "x": [
+    619.3,
+    747.1
+   ],
+   "y": [
+    387.15,
+    472.65
+   ],
+   "z": [
+    0.0,
+    160.0
+   ],
    "status": "assumed",
-   "_note": "what stands on it is not known and assumed empty; the gripper blocks pass over it (56 mm above the deck and higher) when gripping on Nest7mm_Pos[3], which cleared it on 2026-11-18 15:46. Add a box here (or a site) when something stands there"}
+   "_note": "height of open tube caps above the POGO assumed 160"
+  },
+  {
+   "name": "CPLC 1 (Inheco CPLC Flat)",
+   "x": [
+    615.6,
+    752.8
+   ],
+   "y": [
+    375.0,
+    477.2
+   ],
+   "z": [
+    0.0,
+    84.1
+   ],
+   "status": "measured",
+   "_note": "dump"
+  },
+  {
+   "name": "CPLC 2 (Inheco CPLC Flat)",
+   "x": [
+    617.5,
+    754.7
+   ],
+   "y": [
+    260.9,
+    363.3
+   ],
+   "z": [
+    0.0,
+    84.1
+   ],
+   "status": "measured",
+   "_note": "dump; over-approximated at its back right corner (see exceptions)"
+  },
+  {
+   "name": "CPLC 3 (Inheco CPLC Flat)",
+   "x": [
+    616.6,
+    753.9
+   ],
+   "y": [
+    145.9,
+    248.2
+   ],
+   "z": [
+    0.0,
+    84.1
+   ],
+   "status": "measured",
+   "_note": "dump"
+  },
+  {
+   "name": "BioShake",
+   "x": [
+    609.5,
+    751.5
+   ],
+   "y": [
+    29.4,
+    128.4
+   ],
+   "z": [
+    0.0,
+    84.2
+   ],
+   "status": "measured"
+  },
+  {
+   "name": "Magnum FLX (front left)",
+   "x": [
+    770.35,
+    898.15
+   ],
+   "y": [
+    42.65,
+    128.15
+   ],
+   "z": [
+    0.0,
+    31.0
+   ],
+   "status": "measured",
+   "_note": "dump (2025-05); the base worktable has the Magnum on Nest61mm_Pos_1[15] instead: kept here, as the more cautious"
+  },
+  {
+   "name": "Hotel",
+   "x": [
+    759.5,
+    884.5
+   ],
+   "y": [
+    595.5,
+    745.5
+   ],
+   "z": [
+    0.0,
+    264.0
+   ],
+   "status": "measured",
+   "_note": "outside only"
+  },
+  {
+   "name": "Incubator",
+   "x": [
+    899.0,
+    1029.5
+   ],
+   "y": [
+    577.0,
+    839.0
+   ],
+   "z": [
+    11.8,
+    281.8
+   ],
+   "status": "measured",
+   "_note": "outside only"
+  },
+  {
+   "name": "Inheco ODTC 96",
+   "x": [
+    1270.0,
+    1518.0
+   ],
+   "y": [
+    623.5,
+    780.0
+   ],
+   "z": [
+    6.0,
+    130.3
+   ],
+   "status": "measured",
+   "_note": "dump, outside only"
+  },
+  {
+   "name": "FCA thru deck waste chute",
+   "x": [
+    393.5,
+    425.5
+   ],
+   "y": [
+    133.0,
+    213.0
+   ],
+   "z": [
+    0.0,
+    156.0
+   ],
+   "status": "measured",
+   "_note": "dump"
+  },
+  {
+   "name": "waste thru trough",
+   "x": [
+    384.5,
+    434.5
+   ],
+   "y": [
+    0.0,
+    583.5
+   ],
+   "z": [
+    0.0,
+    51.0
+   ],
+   "status": "measured",
+   "_note": "dump"
+  },
+  {
+   "name": "Infinite 200 PRO",
+   "x": [
+    1427.6,
+    2019.9
+   ],
+   "y": [
+    31.5,
+    470.3
+   ],
+   "z": [
+    0.0,
+    249.3
+   ],
+   "status": "measured",
+   "_note": "dump, outside only"
+  }
  ],
- "footprint": {"half_x": 63.9, "half_y": 42.7, "_note": "SBS footprint of every modelled object (127.8 x 85.4)"},
+ "footprint": {
+  "half_x": 63.9,
+  "half_y": 42.7,
+  "_note": "SBS footprint of every modelled object (127.8 x 85.4)"
+ },
  "kinds": {
-  "plate": {"height": 11.5, "height_with_lid": 14.0,
-            "carry": {"below": 3.0, "above": 11.4}, "carry_with_lid": {"below": 2.0, "above": 12.0},
-            "status": "estimated", "_note": "tops on a 7 mm nest 18.5 / with lid 21"},
-  "plate_lid": {"height": 15.0, "carry": {"below": 3.0, "above": 6.0}, "status": "assumed",
-                "_note": "height of a plate lid lying on its own on a nest assumed as for a parked tip lid (top 22)"},
-  "trough": {"height": 41.0, "height_with_lid": 43.0, "status": "estimated",
-             "_note": "tops on a 7 mm nest 48 / with lid 50"},
-  "trough_lid": {"height": 15.0, "carry": {"below": 3.0, "above": 6.0}, "status": "estimated",
-                 "_note": "lying on its own on a nest: top 22"},
-  "rack1000": {"height": 103.0, "height_with_lid": 109.0, "status": "estimated",
-               "_note": "tops on a 7 mm nest 110 / with lid 116 (FluentControl's own collision report)"},
-  "tip_lid": {"height": 15.0, "carry": {"below": 3.0, "above": 12.0}, "status": "estimated",
-              "_note": "lying on its own on a nest: top 22"}
+  "plate": {
+   "height": 11.5,
+   "height_with_lid": 14.0,
+   "carry": {
+    "below": 3.0,
+    "above": 11.4
+   },
+   "carry_with_lid": {
+    "below": 2.0,
+    "above": 12.0
+   },
+   "status": "estimated",
+   "_note": "tops on a 7 mm nest 18.5 / with lid 21"
+  },
+  "plate_lid": {
+   "height": 9.0,
+   "carry": {
+    "below": 3.0,
+    "above": 6.0
+   },
+   "status": "estimated",
+   "_note": "Lid_9mm_Custom, 9 mm high (definitions), lying on its own"
+  },
+  "trough": {
+   "height": 41.0,
+   "height_with_lid": 43.0,
+   "status": "estimated",
+   "_note": "tops on a 7 mm nest 48 / with lid 50"
+  },
+  "trough_lid": {
+   "height": 15.0,
+   "carry": {
+    "below": 3.0,
+    "above": 6.0
+   },
+   "status": "estimated",
+   "_note": "lying on its own on a nest: top 22"
+  },
+  "rack1000": {
+   "height": 103.0,
+   "height_with_lid": 109.0,
+   "status": "estimated",
+   "_note": "tops on a 7 mm nest 110 / with lid 116 (FluentControl's own collision report)"
+  },
+  "tip_lid": {
+   "height": 15.0,
+   "carry": {
+    "below": 3.0,
+    "above": 12.0
+   },
+   "status": "estimated",
+   "_note": "lying on its own on a nest: top 22"
+  },
+  "pcr_plate": {
+   "height": 15.7,
+   "height_with_lid": 18.3,
+   "carry": {
+    "below": 3.0,
+    "above": 15.7
+   },
+   "carry_with_lid": {
+    "below": 3.0,
+    "above": 18.3
+   },
+   "status": "estimated",
+   "_note": "96 Well Skirted PCR_Custom, 15.7 mm (definitions); with its 6 mm lid 18.3 (dump: lid seated 12.3 above the plate's bottom)"
+  },
+  "pcr_lid": {
+   "height": 6.0,
+   "carry": {
+    "below": 3.0,
+    "above": 6.0
+   },
+   "status": "estimated",
+   "_note": "Lid_6mm(_Custom), 6 mm (definitions)"
+  },
+  "odtc_lid": {
+   "height": 9.0,
+   "carry": {
+    "below": 3.0,
+    "above": 9.0
+   },
+   "status": "estimated",
+   "_note": "ODTC_Lid, 9 mm (definitions)"
+  },
+  "rack_short": {
+   "height": 65.0,
+   "height_with_lid": 71.0,
+   "status": "estimated",
+   "_note": "FCA 10 / 50 / 200 ul racks: 65 mm (dump); the lid adds 6 mm as on the 1000 ul rack"
+  },
+  "pogo": {
+   "height": 65.0,
+   "height_with_lid": 86.1,
+   "status": "assumed",
+   "_note": "Alpaqua POGO_Custom on a CPLC: 65 mm (dump); with tubes in it (open caps) top assumed 160"
+  },
+  "magnum": {
+   "height": 35.2,
+   "status": "measured",
+   "_note": "Alpaqua Magnum FLX, 35.2 mm (definitions)"
+  }
  },
  "kind_rules": [
-  {"label": "^Rack(50|200|1000)_Lid\\[", "kind": "tip_lid"},
-  {"label": "^TroughLid\\[", "kind": "trough_lid"},
-  {"type": "Lid", "kind": "plate_lid"},
-  {"label": "_Lid(_[0-9]+mm)?\\[", "kind": "plate_lid"},
-  {"type": "^96 Well Flat", "kind": "plate"},
-  {"type": "SBS Trough", "kind": "trough"},
-  {"type": "1000ul SBS", "kind": "rack1000"},
-  {"label": "^(CulturePlate|Plate[A-Z]|P[0-9]+)\\[", "kind": "plate"},
-  {"_note": "first rule that matches wins; the colour-water labware is matched by label because its FluentControl types were not available when this table was made"}
+  {
+   "type": "^96 Well Flat_Custom$",
+   "kind": "plate"
+  },
+  {
+   "type": "^96 Well Skirted PCR_Custom(_Template)?$",
+   "kind": "pcr_plate"
+  },
+  {
+   "type": "^Lid_9mm_Custom$",
+   "kind": "plate_lid"
+  },
+  {
+   "type": "^Lid_9mm$",
+   "kind": "trough_lid"
+  },
+  {
+   "type": "^Lid_DiTiFCA$",
+   "kind": "tip_lid"
+  },
+  {
+   "type": "^Lid_6mm(_Custom)?$",
+   "kind": "pcr_lid"
+  },
+  {
+   "type": "^ODTC_Lid(_1_1)?$",
+   "kind": "odtc_lid"
+  },
+  {
+   "type": "^4 Well SBS Trough$",
+   "kind": "trough"
+  },
+  {
+   "type": "^FCA, 1000ul SBS$",
+   "kind": "rack1000"
+  },
+  {
+   "type": "^FCA, (10|50|200)ul( Filtered)? SBS$",
+   "kind": "rack_short"
+  },
+  {
+   "type": "^Alpaqua POGO_Custom$",
+   "kind": "pogo"
+  },
+  {
+   "type": "^Alpaqua Magnum FLX$",
+   "kind": "magnum"
+  },
+  {
+   "label": "^Rack(50|200|1000)_Lid\\[",
+   "kind": "tip_lid"
+  },
+  {
+   "label": "^TroughLid\\[",
+   "kind": "trough_lid"
+  },
+  {
+   "label": "_Lid(_[0-9]+mm)?\\[",
+   "kind": "plate_lid"
+  },
+  {
+   "label": "^(CulturePlate|Plate[A-Z]|P[0-9]+)\\[",
+   "kind": "plate"
+  },
+  {
+   "_note": "first rule that matches wins: the FluentControl type names first, labels only as a fallback (FluentControl lets a label be anything)"
+  }
  ],
  "grips": [
-  {"kind": "plate", "class": "nest7mm", "on": null, "mode": "NARROW", "z": 7.1, "G": 82.4, "status": "measured"},
-  {"kind": "plate", "class": "regrip", "on": null, "mode": "NARROW", "z": 7.1, "G": 82.4, "status": "measured"},
-  {"kind": "plate", "class": "regrip", "on": null, "mode": "WIDE", "z": 9.1, "G": 131.8, "status": "assumed",
-   "_note": "the WIDE grip at Regrip has not run (16:32 FluentControl refused the move); Z 9.1 as the NARROW approach"},
-  {"kind": "plate", "class": "cplc", "on": null, "mode": "NARROW", "z": 74.0, "G": 82.4, "status": "measured"},
-  {"kind": "plate", "class": "bioshake", "on": null, "mode": "NARROW", "z": 87.9, "G": 82.4, "status": "measured"},
-  {"kind": "plate_lid", "class": "nest7mm", "on": "plate", "mode": "NARROW", "z": 14.7, "G": 83.8,
-   "status": "measured"},
-  {"kind": "plate_lid", "class": "regrip", "on": "plate", "mode": "NARROW", "z": 14.7, "G": 83.8,
-   "status": "estimated", "_note": "same nest height as Nest7mm_Pos"},
-  {"kind": "plate_lid", "class": "cplc", "on": "plate", "mode": "NARROW", "z": 81.6, "G": 83.8, "status": "assumed",
-   "_note": "taught path of FluentControl, not yet run on the instrument"},
-  {"kind": "plate_lid", "class": "nest7mm", "on": null, "mode": "NARROW", "z": 7.1, "G": 83.8, "status": "measured"},
-  {"kind": "trough_lid", "class": "nest7mm", "on": "trough", "mode": "NARROW", "z": 44.1, "G": 84.2,
-   "status": "measured"},
-  {"kind": "trough_lid", "class": "nest7mm", "on": null, "mode": "NARROW", "z": 7.1, "G": 84.2, "status": "measured"},
-  {"kind": "tip_lid", "class": "nest7mm", "on": "rack1000", "mode": "NARROW", "z": 104.1, "G": 83.6,
-   "status": "measured"},
-  {"kind": "tip_lid", "class": "nest7mm", "on": null, "mode": "NARROW", "z": 10.1, "G": 83.6, "status": "measured"}
- ]
+  {
+   "kind": "plate",
+   "class": "nest7mm",
+   "on": null,
+   "mode": "NARROW",
+   "z": 7.1,
+   "G": 82.4,
+   "status": "measured"
+  },
+  {
+   "kind": "plate",
+   "class": "regrip",
+   "on": null,
+   "mode": "NARROW",
+   "z": 7.1,
+   "G": 82.4,
+   "status": "measured"
+  },
+  {
+   "kind": "plate",
+   "class": "regrip",
+   "on": null,
+   "mode": "WIDE",
+   "z": 9.0,
+   "G": 131.8,
+   "status": "derived",
+   "_note": "Regrip_Pos Wide path: last waypoint 0 (reference 7.0) plus the 2 mm offset of the reader route; its approach, 55 mm higher, is the Z 64 of the WIDE move logged on 2026-11-18 16:32"
+  },
+  {
+   "kind": "plate",
+   "class": "cplc",
+   "on": null,
+   "mode": "NARROW",
+   "z": 74.0,
+   "G": 82.4,
+   "status": "measured",
+   "_note": "CPLC_Flat_Pos 2 and 3"
+  },
+  {
+   "kind": "plate",
+   "class": "bioshake",
+   "on": null,
+   "mode": "NARROW",
+   "z": 87.9,
+   "G": 82.4,
+   "status": "measured"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "nest7mm",
+   "on": null,
+   "mode": "NARROW",
+   "z": 7.1,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "same site path as the 96 Well Flat_Custom plate (the path belongs to the site); not yet observed"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "regrip",
+   "on": null,
+   "mode": "NARROW",
+   "z": 7.1,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "same site path as the 96 Well Flat_Custom plate (the path belongs to the site); not yet observed"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "cplc",
+   "on": null,
+   "mode": "NARROW",
+   "z": 74.0,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "same site path as the 96 Well Flat_Custom plate (the path belongs to the site); not yet observed"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "bioshake",
+   "on": null,
+   "mode": "NARROW",
+   "z": 87.9,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "same site path as the 96 Well Flat_Custom plate (the path belongs to the site); not yet observed"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "regrip_pcr",
+   "on": null,
+   "mode": "NARROW",
+   "z": 8.4,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "definitions: the PCR site template's last waypoint against the calibrated reference of the same place; not yet observed"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "cplc_pcr",
+   "on": null,
+   "mode": "NARROW",
+   "z": 74.4,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "definitions: the PCR site template's last waypoint against the calibrated reference of the same place; not yet observed"
+  },
+  {
+   "kind": "pcr_plate",
+   "class": "bioshake_pcr",
+   "on": null,
+   "mode": "NARROW",
+   "z": 87.1,
+   "G": 82.4,
+   "status": "derived",
+   "_note": "definitions: the PCR site template's last waypoint against the calibrated reference of the same place; not yet observed"
+  },
+  {
+   "kind": "plate_lid",
+   "class": "nest7mm",
+   "on": "plate",
+   "mode": "NARROW",
+   "z": 14.7,
+   "G": 83.8,
+   "status": "measured"
+  },
+  {
+   "kind": "plate_lid",
+   "class": "regrip",
+   "on": "plate",
+   "mode": "NARROW",
+   "z": 14.7,
+   "G": 83.8,
+   "status": "estimated",
+   "_note": "same nest height as Nest7mm_Pos"
+  },
+  {
+   "kind": "plate_lid",
+   "class": "cplc",
+   "on": "plate",
+   "mode": "NARROW",
+   "z": 81.6,
+   "G": 83.8,
+   "status": "measured",
+   "_note": "CPLC_Flat_Pos 2, 2026-11-17"
+  },
+  {
+   "kind": "plate_lid",
+   "class": "nest7mm",
+   "on": null,
+   "mode": "NARROW",
+   "z": 7.1,
+   "G": 83.8,
+   "status": "measured"
+  },
+  {
+   "kind": "pcr_lid",
+   "class": "nest7mm",
+   "on": "pcr_plate",
+   "mode": "NARROW",
+   "z": 22.0,
+   "G": 83.8,
+   "status": "estimated",
+   "_note": "lid seat 12.3 above the plate's bottom (dump) plus the 2.7 mm a 9 mm lid is gripped above its own bottom on a flat plate; not yet observed"
+  },
+  {
+   "kind": "pcr_lid",
+   "class": "regrip",
+   "on": "pcr_plate",
+   "mode": "NARROW",
+   "z": 22.0,
+   "G": 83.8,
+   "status": "estimated",
+   "_note": "lid seat 12.3 above the plate's bottom (dump) plus the 2.7 mm a 9 mm lid is gripped above its own bottom on a flat plate; not yet observed"
+  },
+  {
+   "kind": "pcr_lid",
+   "class": "cplc",
+   "on": "pcr_plate",
+   "mode": "NARROW",
+   "z": 88.9,
+   "G": 83.8,
+   "status": "estimated",
+   "_note": "lid seat 12.3 above the plate's bottom (dump) plus the 2.7 mm a 9 mm lid is gripped above its own bottom on a flat plate; not yet observed"
+  },
+  {
+   "kind": "trough_lid",
+   "class": "nest7mm",
+   "on": "trough",
+   "mode": "NARROW",
+   "z": 44.1,
+   "G": 84.2,
+   "status": "measured"
+  },
+  {
+   "kind": "trough_lid",
+   "class": "nest7mm",
+   "on": null,
+   "mode": "NARROW",
+   "z": 7.1,
+   "G": 84.2,
+   "status": "measured"
+  },
+  {
+   "kind": "tip_lid",
+   "class": "nest7mm",
+   "on": "rack1000",
+   "mode": "NARROW",
+   "z": 104.1,
+   "G": 83.6,
+   "status": "measured"
+  },
+  {
+   "kind": "tip_lid",
+   "class": "nest7mm",
+   "on": null,
+   "mode": "NARROW",
+   "z": 10.1,
+   "G": 83.6,
+   "status": "measured"
+  },
+  {
+   "kind": "tip_lid",
+   "class": "nest61mm",
+   "on": "rack_short",
+   "mode": "NARROW",
+   "z": 119.0,
+   "G": 83.6,
+   "status": "measured",
+   "_note": "10, 50 and 200 ul racks, 2026-11-17/18"
+  },
+  {
+   "kind": "tip_lid",
+   "class": "nest61mm",
+   "on": "rack1000",
+   "mode": "NARROW",
+   "z": 158.1,
+   "G": 83.6,
+   "status": "derived",
+   "_note": "61 mm nest surface + 97.1 as on a 7 mm nest; not yet observed"
+  },
+  {
+   "kind": "tip_lid",
+   "class": "nest61mm",
+   "on": null,
+   "mode": "NARROW",
+   "z": 64.1,
+   "G": 83.6,
+   "status": "derived",
+   "_note": "61 mm nest surface + 3.1 as on a 7 mm nest; not yet observed"
+  },
+  {
+   "kind": "tip_lid",
+   "class": "nest7mm",
+   "on": "rack_short",
+   "mode": "NARROW",
+   "z": 65.0,
+   "G": 83.6,
+   "status": "derived",
+   "_note": "7 mm nest surface + 58 as on a 61 mm nest; not yet observed"
+  }
+ ],
+ "exceptions": [
+  {
+   "site": "Regrip_Pos[1]",
+   "mode": "WIDE",
+   "kinds": [
+    "plate"
+   ],
+   "part": "gripper block",
+   "obstacle": "CPLC 2 (Inheco CPLC Flat)",
+   "reason": "instrument-validated reader transfers 2026-08 and 2026-10; CPLC box over-approximated",
+   "_note": "only this pair at this site and grip; every other part and obstacle of the WIDE grip is still checked"
+  }
+ ],
+ "_fixed": "Left out from the dump (2025-05 layout): the Inheco DWP incubator box (X 1075-1234) and the Centrifuge: the RGA moved through that space at Nest7mm_Pos 4-7 on 2026-11-17/18, so they no longer stand there; the right column of 7 mm nests is newer than the dump"
 }
