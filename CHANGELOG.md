@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RGA clearance check (io/fluent/rga_clearance.py, data/fluent780_rga_geometry.json): before any RGA transfer is
+  sent (`Labware.TransferLabware`, `PutLidOn`, `MoveLabwareToBase`, `PlateTransfer.MoveLabware` / `ReturnLabware`,
+  the reader transfers of `PlateHandling`), the vertical moves at the source and the destination are checked against
+  the deck (base worktable, deck state and the open run) for every RGA part and the carried labware. Closer than
+  `fluent.rga_clearance.margin_mm` (5 mm) refuses the command with the part, the obstacle, the site and the gap;
+  a transfer the table cannot check (unknown type, site or grip height) is refused too unless
+  `fluent.rga_clearance.unknown` is "warn". The result is kept in the operation's record. FluentControl itself does
+  not check these descents (2026-11-18: the RGA hit a 1000 ul tip rack). The model reproduces 11 real events
+  (regression tests).
+- `Deck.CheckRgaMoves(Moves)`: the same check for a planned sequence of transfers ("label: source -> destination"),
+  each applied to a copy of the deck before the next; moves nothing. Also offline:
+  `python -m unitelabs.tecan_fluent.io.fluent.rga_clearance layout.json moves.txt`.
+- The labware of a worktable (`DefinitionView.labware`) names what it stands on (`"on"`, e.g. the plate under a lid
+  at a cover site).
 - `CoolingHeatingPlates.ReadTemperature(Slot)`: the driver-reported temperature of a CPLC position, from
   `inhecoMTC_GetTemperature` and the driver's log entry (docs/cplc_actual_temperature.md). Needs an open run and the
   driver's GetTemperature macro enabled (it was not on 2026-11-17, so the command refuses until it is).
@@ -69,6 +83,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- With the table as it is, the reader transfers (`PlateHandling.MeasurePlate` / `MeasureWorktablePlate`) are refused:
+  with the assumed WIDE grip height at `Regrip_Pos` the gripper block would reach over the CPLC. Measure the WIDE grip
+  and correct the table (README, RGA clearance check). Moves to or from sites not in the table (ODTC, the left tip
+  carriers, ...) are refused until they are added, or with `fluent.rga_clearance.unknown: "warn"`.
 - **Breaking: feature identifiers are device first** (`docs/device_naming_spec.md`). Every feature sets its category,
   identifier and display name explicitly, e.g. `jp.riken.bdr/fluent/RunController/v1` ->
   `jp.riken.bdr/tecan.fluent/RunControl/v1` "Fluent - Run (Start / End)". The full old -> new table is in

@@ -334,6 +334,35 @@ def test_with_a_deck_state_unknown_labware_is_refused_before_sending(preflight, 
     assert json.loads((record.folder / "manifest.json").read_text())["deck"]["version"] == 1
 
 
+def test_labware_on_labware_names_what_it_stands_on():
+    from unitelabs.tecan_fluent.io.fluentcontrol.definitions import workspace_labware
+
+    lid = (
+        "<ConnectedComponent><CarrierOrLabwareTemplateGUID>lid</CarrierOrLabwareTemplateGUID>"
+        "<LabwareName><a:KeyValueOfstringstring><a:Key>default</a:Key><a:Value>Plate_Lid[001]</a:Value>"
+        "</a:KeyValueOfstringstring></LabwareName></ConnectedComponent>"
+    )
+    plate = (
+        "<ConnectedComponent><CarrierOrLabwareTemplateGUID>flat</CarrierOrLabwareTemplateGUID>"
+        "<LabwareName><a:KeyValueOfstringstring><a:Key>default</a:Key><a:Value>Plate[001]</a:Value>"
+        "</a:KeyValueOfstringstring></LabwareName>"
+        f"<Arrangements><Arrangement><Sites>{site('s-cover', lid)}</Sites></Arrangement></Arrangements>"
+        "</ConnectedComponent>"
+    )
+    xml = (
+        f'<Workspace xmlns="{C}" xmlns:a="{A}"><Frame><Arrangements>'
+        f"<Arrangement><Sites>{site('s-nest')}{site('s-nest', plate)}</Sites></Arrangement>"
+        "</Arrangements></Frame></Workspace>"
+    ).encode()
+    out = workspace_labware(
+        xml,
+        {"s-nest": "Nest7mm_Pos", "s-cover": "96Microplate_CoverSite_4"},
+        {"flat": "96 Well Flat_Custom", "lid": "L"},
+    )
+    assert out["Plate[001]"] == {"type": "96 Well Flat_Custom", "location": "Nest7mm_Pos", "site": 2, "on": ""}
+    assert out["Plate_Lid[001]"] == {"type": "L", "location": "96Microplate_CoverSite_4", "site": 1, "on": "Plate[001]"}
+
+
 def test_labware_only_on_the_runtime_workspace_is_known_to_the_deck_state(pc, tmp_path):
     from unitelabs.tecan_fluent.io.fluent.deck.state import DeckConfig, DeckState
     from unitelabs.tecan_fluent.io.fluent.gripper.statements import add_labware_xml, remove_labware_xml
@@ -353,7 +382,7 @@ def test_labware_only_on_the_runtime_workspace_is_known_to_the_deck_state(pc, tm
     preflight = Preflight(DefinitionsConfig(workspace="WT_TEST"), dry_run=False, pc=pc, background=False)
     view = preflight.definition_view()
     assert view.runtime == {"Trough[001]"} and set(view.labware) == {"Plate[001]", "Trough[001]"}
-    assert view.labware["Trough[001]"] == {"type": "FCA, 200ul SBS", "location": "Nest7mm_Pos", "site": 2}
+    assert view.labware["Trough[001]"] == {"type": "FCA, 200ul SBS", "location": "Nest7mm_Pos", "site": 2, "on": ""}
     assert preflight.runtime_labels() == {"Trough[001]"}
 
     deck = DeckState(

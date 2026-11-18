@@ -74,7 +74,8 @@ class DefinitionView:
     sites: dict
     """Location name -> number of sites on the base worktable."""
     labware: dict
-    """Labware FluentControl starts a run with: label -> {"type", "location", "site"} (site from 1). The labware of the
+    """Labware FluentControl starts a run with: label -> {"type", "location", "site", "on"} (site from 1; "on" is the
+    label of the labware it stands on, e.g. the plate under a lid, or ""). The labware of the
     base worktable, and the labware of the RuntimeWorkspace that is not on it (labware added in earlier runs stays
     there, e.g. 96 Well Flat_Custom[001] and 4 Well SBS Trough[001])."""
     runtime: set = dataclasses.field(default_factory=set)
@@ -347,12 +348,15 @@ def parse_workspace(xml: bytes, site_location: dict[str, str]) -> tuple[dict[str
 
 
 def workspace_labware(xml: bytes, site_location: dict[str, str], component_name: dict[str, str]) -> dict[str, dict]:
-    """Labware placed on a worktable: label -> {"type", "location", "site"} (site counted from 1 per location)."""
+    """Labware placed on a worktable: label -> {"type", "location", "site", "on"} (site counted from 1 per location;
+    "on" is the label of the labware it stands on, e.g. the plate under a lid at a cover site, or "")."""
     root = ET.fromstring(xml)
     counts: dict[str, int] = {}
     out: dict[str, dict] = {}
 
     def walk(comp):
+        parent = comp.find(C + "LabwareName/" + A + "KeyValueOfstringstring/" + A + "Value")
+        parent_label = parent.text if parent is not None and parent.text else ""
         arrs = comp.find(C + "Arrangements")
         for arr in arrs.findall(C + "Arrangement") if arrs is not None else []:
             sites = arr.find(C + "Sites")
@@ -369,6 +373,7 @@ def workspace_labware(xml: bytes, site_location: dict[str, str], component_name:
                             "type": component_name.get(cc.findtext(C + "CarrierOrLabwareTemplateGUID") or "", ""),
                             "location": g,
                             "site": counts[g],
+                            "on": parent_label,
                         }
                     walk(cc)
 

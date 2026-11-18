@@ -4,7 +4,9 @@ shares it among its features.
 
 Flow (one operation = one FluentControl run, unless a run was opened with StartRun)
 ----------------------------------------------------------------------------------
-0. Check and record every definition the XML uses (definitions.Preflight). Refuse if something is missing or changed
+0. Check every RGA transfer against the deck (io/fluent/rga_clearance.py): refuse if any part of the RGA or the carried
+   labware would come too close to something on the way down to the grip height or back up. Then check and record every
+   definition the XML uses (definitions.Preflight). Refuse if something is missing or changed
 1. Check the state. Refuse without doing anything unless it is EditMode or RunModeRunFinished
    (do not interfere with someone else's run, or with a run stopped at a dialog)
 2. (RunModeRunFinished counts as idle. FluentControl has already closed the method, so go straight on)
@@ -31,6 +33,8 @@ import time
 
 from unitelabs.cdk.config import Config
 
+from ..fluent import rga_clearance
+from ..fluent.rga_clearance import RgaClearanceConfig
 from ..odtc.macros import odtc_macro_xml
 from .definitions import DefinitionCheckFailed, DefinitionsConfig, Preflight
 from .errors import BackendError
@@ -123,6 +127,8 @@ class FluentBackendConfig(Config):
     rga_min_seconds: float = 1.0
     """An RGA move whose ExecuteCommand returned faster than this is noted as suspicious in the record (a real move
     takes several seconds)."""
+    rga_clearance: RgaClearanceConfig = dataclasses.field(default_factory=RgaClearanceConfig)
+    """The clearance check of every RGA transfer before it is sent (FluentControl does not check the descents)."""
 
 
 class FluentControlBackend:
@@ -150,6 +156,10 @@ class FluentControlBackend:
         self._run_opened_ticks = 0
         """When the last FluentControl run was started (.NET ticks UTC, a little early), to find the worktable it
         started from (Preflight.run_base_labels)."""
+        self.run_labware: dict = {}
+        """What the statements sent in the open run changed on the deck (AddLabware, RemoveLabware, RGA transfers):
+        label -> rga_clearance.Item, or None when removed. Used by the RGA clearance check."""
+        self._geometry: rga_clearance.Geometry | None = None
 
     def attach_deck(self, deck) -> None:
         """Register this deck state at the start of every run, and refuse labware labels it does not know."""
@@ -243,6 +253,9 @@ class FluentControlBackend:
         """
         what = self.current_operation or steps[0][0]
         session = self._session["rel"] if self._session else ""
+        clearance = self._check_clearance(steps, what)  # refuses before anything else is done
+        if clearance is not None:
+            extra = {**(extra or {}), "rga_clearance": clearance}
         # a run of their own starts from the worktable, so the deck state is registered first (an open run had it
         # registered at StartRun)
         deck = None if self._session else self._deck_begin(session)
@@ -283,6 +296,8 @@ class FluentControlBackend:
                 failed["rga_checks"] = checks
             record.finish(failed)
             raise
+        if self._session:
+            self._note_run_labware(steps)
         result = {"status": "ok", "seconds": durations, "in_open_run": bool(self._session)}
         if checks:
             result["rga_checks"] = checks
@@ -296,6 +311,108 @@ class FluentControlBackend:
         if not self.config.dry_run:
             self.preflight.forget_dry_runs()  # dry-run records are only kept until a real operation has run
         return durations
+
+    # ---- RGA clearance (io/fluent/rga_clearance.py)
+    @property
+    def geometry(self) -> rga_clearance.Geometry:
+        if self._geometry is None:
+            self._geometry = rga_clearance.Geometry.load(self.config.rga_clearance.geometry_file)
+        return self._geometry
+
+    def rga_snapshot(self) -> rga_clearance.Snapshot:
+        """What is on the deck now: the base worktable, changed by the deck state and by the open run. Raises
+        BackendError when the base worktable or the deck state cannot be read."""
+        workspace = self.config.definitions.workspace
+        if self.geometry.worktables and workspace not in self.geometry.worktables:
+            raise BackendError(
+                f"the RGA geometry table describes the deck of worktable {', '.join(self.geometry.worktables)}, "
+                f"not {workspace} (setting fluent.rga_clearance.geometry_file)"
+            )
+        try:
+            view = self.preflight.definition_view()
+        except DefinitionCheckFailed as exc:
+            raise BackendError(f"the base worktable could not be read ({exc})") from None
+        entries = self.deck.load()["labware"] if self.deck is not None else None
+        return rga_clearance.snapshot(view.labware, entries, self.run_labware)
+
+    def check_rga_moves(self, moves: list[str]) -> list[rga_clearance.Result]:
+        """Check a planned sequence of RGA transfers against the deck as it is now (rga_clearance.check_moves). Sends
+        nothing."""
+        margin = self.config.rga_clearance.margin_mm
+        return rga_clearance.check_moves(self.geometry, self.rga_snapshot(), moves, margin)
+
+    def _note_run_labware(self, steps: list[tuple[str, str]]) -> None:
+        """Remember what the statements just sent in the open run changed on the deck."""
+        changed = [xml for _, xml in steps if rga_clearance.RGA_MACRO in xml or "LabwareDataV1" in xml]
+        if not changed:
+            return
+        try:
+            snap = self.rga_snapshot()
+        except BackendError as exc:
+            logger.warning("RGA clearance: the moves of the open run could not be noted: %s", exc)
+            return
+        before = {k: dataclasses.astuple(v) for k, v in snap.items.items()}
+        for xml in changed:
+            rga_clearance.apply_statement(snap, xml)
+        for label in set(before) | set(snap.items):
+            item = snap.items.get(label)
+            if item is None:
+                self.run_labware[label] = None
+            elif before.get(label) != dataclasses.astuple(item):
+                self.run_labware[label] = item
+
+    def _check_clearance(self, steps: list[tuple[str, str]], what: str) -> dict | None:
+        """Check every RGA transfer of the steps against the deck before anything is sent. Raises BackendError when a
+        transfer would bring the RGA too close to something, or cannot be checked and rga_clearance.unknown is
+        "refuse". Returns what goes into the record (None: no RGA transfer, or the check is off)."""
+        cfg = self.config.rga_clearance
+        if not cfg.enabled or not any(rga_clearance.RGA_MACRO in xml for _, xml in steps):
+            return None
+        if cfg.unknown not in rga_clearance.UNKNOWN_POLICIES:
+            raise BackendError(f"rga_clearance.unknown must be one of {', '.join(rga_clearance.UNKNOWN_POLICIES)}")
+        record: dict = {"margin_mm": cfg.margin_mm, "unknown": cfg.unknown}
+        try:
+            results = rga_clearance.check_steps(self.geometry, self.rga_snapshot(), steps, cfg.margin_mm)
+        except BackendError as exc:
+            reason = f"The RGA moves could not be checked for collisions: {exc}"
+            record.update(checked=False, reason=reason)
+            if self.config.dry_run:  # nothing is sent; the record says it was not checked
+                logger.warning("dry-run: %s", reason)
+                return record
+            if cfg.unknown == "refuse":
+                self._clearance_refused(what, record)
+                raise BackendError(f"{reason}. Nothing was sent (setting fluent.rga_clearance.unknown)") from None
+            logger.warning("%s; sent anyway (rga_clearance.unknown is 'warn')", reason)
+            return record
+        record.update(checked=True, transfers=[r.as_dict() for r in results])
+        collisions = [r for r in results if r.verdict == "collision"]
+        unknown = [r for r in results if r.verdict == "unknown"]
+        if collisions:
+            self._clearance_refused(what, record)
+            raise BackendError(
+                "Refused by the RGA clearance check, nothing was sent: "
+                + " | ".join(r.summary() for r in collisions)
+                + ". FluentControl does not check these descents; move the obstacle or choose another site"
+            )
+        if unknown and cfg.unknown == "refuse":
+            self._clearance_refused(what, record)
+            raise BackendError(
+                "Refused: the RGA clearance check cannot check "
+                + " | ".join(r.summary() for r in unknown)
+                + ". Nothing was sent. Add the labware type, site or grip height to the RGA geometry table, or set "
+                "fluent.rga_clearance.unknown to 'warn'"
+            )
+        for r in unknown:
+            logger.warning("RGA clearance: %s; sent anyway (rga_clearance.unknown is 'warn')", r.summary())
+        return record
+
+    def _clearance_refused(self, what: str, record: dict) -> None:
+        """Keep a record of a refused operation (never fails the refusal)."""
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        try:
+            self.write_record(f"rga_clearance\\{stamp}_refused.json", {"operation": what, **record})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not record the refused RGA move: %s", exc)
 
     # ---- The deck state at the start of a run
     def _deck_begin(self, session: str):
@@ -549,6 +666,7 @@ class FluentControlBackend:
         started = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self._session = {"rel": self._session_rel(started), "started": started, "commands": 0}
         self.session_labware = {}
+        self.run_labware = {}
         self.tips = {}
         try:
             deck = self._deck_begin(self._session["rel"])
@@ -574,6 +692,7 @@ class FluentControlBackend:
             raise BackendError(f"Tips are still mounted on channels {sorted(self.tips)}: drop them first (DropTips)")
         images_end = self._deck_images("end")
         session, self._session = self._session, None
+        self.run_labware = {}
         if not self.config.dry_run:
             self._close_run(report)
         self._write_session(

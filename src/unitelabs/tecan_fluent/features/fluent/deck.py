@@ -26,6 +26,7 @@ class Deck(sila.Feature):
 
     Record changes while hands-off is held (Fluent - Hands Off) and no run is open: an open run already has its
     layout. Every change increases the version and is recorded on the Fluent PC (folder deck of the OFML records).
+    CheckRgaMoves checks a planned sequence of RGA transfers against the deck for collisions.
     """
 
     def __init__(self, backend: FluentControlBackend, deck: DeckState | None):
@@ -79,6 +80,38 @@ class Deck(sila.Feature):
         if self.deck is None:
             return []
         return await self._call(self.deck.tip_racks)
+
+    @sila.UnobservableCommand(errors=[DeckCommandFailed])
+    async def check_rga_moves(self, moves: list[str]) -> list[str]:
+        """
+        Check a planned sequence of RGA transfers for collisions, against the deck as it is now. Moves nothing and
+        needs no FluentControl run (only the base worktable and the deck state on the Fluent PC).
+
+        Each move is checked as every RGA command checks it before it is sent: any part of the RGA (fingers, gripper
+        blocks, rotator, pillar) and the carried labware must stay at least the margin (setting
+        fluent.rga_clearance.margin_mm, 5 mm) away from everything on the deck while the RGA goes straight down to the
+        grip height and back up to the safe height, at the source and at the destination. FluentControl checks only
+        the travel at safe height, not these descents. Each move is applied to a copy of the deck before the next one
+        is checked, so a whole run can be checked before it is started.
+
+        Args:
+          Moves: One move per entry, "label: source -> destination" or "label -> destination" (from where it is
+            now), e.g. "PlateB_Lid[001]: Nest7mm_Pos[2] -> HotelMP_Pos[3]". Source and destination are positions such
+            as Nest7mm_Pos[2]; the destination can also be "base" or "lid of <plate>". For labware not on the deck
+            give its type: "Plate_A[001] (96 Well Flat_Custom): Nest7mm_Pos[1] -> Regrip_Pos[1]".
+
+        Returns:
+          Results: One line per move: "OK" with the smallest gap and where it occurs, "REFUSED" with the RGA part,
+            the obstacle, the site and the gap, or "NOT CHECKED" with what the geometry table lacks.
+        """
+        results = await self._call(self.backend.check_rga_moves, list(moves))
+        out = []
+        for i, r in enumerate(results, 1):
+            line = f"{i}. {r.summary()}"
+            if r.notes:
+                line += f" (note: {'; '.join(r.notes)})"
+            out.append(line)
+        return out
 
     @sila.UnobservableCommand(errors=[DeckCommandFailed])
     async def place_labware(

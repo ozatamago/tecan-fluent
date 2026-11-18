@@ -187,6 +187,9 @@ cp config/bioshake.fluentpc.example.json config/bioshake.json       # a device s
   `waste_labware` (labels the label check always accepts; the DiTi and wash waste a statement names, e.g.
   `FCA Thru Deck Waste Chute_1` or `MCA Thru Deck Waste Chute_1` on a Fluent 480, are accepted anyway). Nothing
   instrument-specific is built in: the same settings serve a Fluent 480 with its own names.
+- `fluent.rga_clearance`: the collision check of every RGA transfer (`enabled`, `margin_mm`, `unknown`,
+  `geometry_file`; see [RGA clearance check](#rga-clearance-check-every-server-that-moves-the-rga)). Its table is
+  for the Fluent 780's deck; another instrument needs its own `geometry_file`.
 
 ### Starting
 
@@ -324,6 +327,80 @@ Use the server from the UniteLabs App or any SiLA 2 client.
   `96 Well Flat_Custom[001]`, home position `Nest7mm_Pos[6]`).
 - **Verified on the instrument from the UniteLabs App on 2026-10-15**: `Nest7mm_Pos[6]` → `Regrip_Pos[1]` → back to
   `Nest7mm_Pos[6]` in a separate run.
+- Every move is checked for collisions first ([RGA clearance check](#rga-clearance-check-every-server-that-moves-the-rga)).
+
+### RGA clearance check (every server that moves the RGA)
+
+FluentControl's path planner plans and checks the RGA's travel at safe height only. The last part of every grip and
+place, straight down from about 140-150 mm to the grip height and back up, is a taught "stored move" that
+FluentControl executes **without any collision check**, and its simulation does not catch it either. On 2026-11-18
+the RGA hit a 1000 ul tip rack this way: gripping in the left column of 7 mm nests (C=180) the RGA body sits 152.5 mm
+to +X, over the right column, and the gripper blocks reach 68.9 mm to either side in Y, over the neighbouring rows.
+
+So the backend checks **every RGA transfer before anything is sent** (`Labware.TransferLabware`, `PutLidOn`,
+`MoveLabwareToBase`, `PlateTransfer.MoveLabware` / `ReturnLabware`, the reader transfers of
+`PlateHandling.MeasurePlate` / `MeasureWorktablePlate`, and any other statement list with `RGA1_TransferLabware`):
+
+- The RGA parts (fingers, finger tips, webs and roots, gripper assembly blocks, rotator, pillar; boxes around the TCP
+  from FluentControl's own RGA collision model) and the carried labware are swept vertically from the grip height to
+  the safe height (150 mm) at the source and at the destination, with the gripper open and with it holding the
+  labware, against the fixed objects of the deck and every labware on it: the base worktable, changed by the deck
+  state (`deck.state_file`) and by what the open run did (AddLabware, RemoveLabware and RGA moves). Lids at cover
+  sites count as part of the height of their plate or rack. The moved labware, what it stands on and its own nest
+  are left out. Each transfer of a statement list is checked against the deck the transfers before it leave.
+- A transfer is **refused** (the feature's own error, e.g. `PlateTransferFailed`, `LabwareCommandFailed`,
+  `ReaderOperationFailed`; nothing is sent, no run is started) when any part comes closer than
+  `fluent.rga_clearance.margin_mm` (5 mm) to anything. The message names the part, the obstacle, the site and the
+  gap, e.g. "at the source Nest7mm_Pos[2] the RGA's gripper block would come 55.4 mm into it:
+  Rack1000[001] at Nest7mm_Pos[5] (TCP Z 14.7, grip Z 14.7 (measured), margin 5 mm)".
+- A transfer that **cannot be checked** is refused as well (`fluent.rga_clearance.unknown: "refuse"`, the default):
+  a labware type, source, destination or grip height (per labware kind, site class, what it stands on and grip mode)
+  that is not in the table, an obstacle of unknown type in reach of the RGA, or a deck that could not be read. With
+  `"warn"` it is sent anyway and the log and the record say it was not checked. In a dry run a deck that cannot be
+  read is only noted.
+- The result of the check goes into the record of the operation (`rga_clearance` in its manifest); a refusal is
+  recorded in `OFML\records\rga_clearance\<time>_refused.json`.
+- Not checked: the horizontal travel at safe height (left to FluentControl's path planner) and the inside of the
+  hotel, the incubator and the reader (not modelled; those moves were validated on the instrument).
+- `Deck.CheckRgaMoves(Moves)` runs the same check for a whole planned sequence against the current deck, applying
+  each move to a copy of the deck, and returns one line per move ("OK" with the smallest gap, "REFUSED" or
+  "NOT CHECKED" with the reason). It moves nothing and needs no FluentControl run. A move is
+  `"label: source -> destination"` or `"label -> destination"`; the destination can also be `base` or
+  `lid of <plate>`; `"label (type): source -> destination"` for labware that is not on the deck. Without the Fluent
+  PC: `python -m unitelabs.tecan_fluent.io.fluent.rga_clearance layout.json moves.txt` (layout: label ->
+  `{"type", "location", "site", "on"}`).
+- Settings (`fluent.rga_clearance`): `enabled` (true), `margin_mm` (5.0), `unknown` ("refuse" or "warn"),
+  `geometry_file` (empty: the table that comes with the connector). The table describes the deck of worktable
+  `WT2411004293_Ver.0.5_OFML`; on any other worktable (`fluent.definitions.workspace`) the check refuses rather than
+  apply its positions.
+
+**The table** is `src/unitelabs/tecan_fluent/data/fluent780_rga_geometry.json`: RGA part boxes, the sites (location
+and site -> TCP position and class: `nest7mm`, `regrip`, `cplc`, `bioshake`, `hotel`, `incubator`, `reader`), the
+fixed objects, the object heights per labware kind (with and without lid), the rules from labware type or label to
+kind, and the grip heights and widths per kind, site class, what it stands on and grip mode (NARROW C=180, open
+89.5 mm; WIDE C=90, 131.8 mm, used for the reader). Positions and grip heights are from FluentControl's RGA log of
+2026-11-18, the parts from its PathFinder dump; every value is marked `measured`, `estimated` or `assumed`. The model
+reproduces 11 real events of 2026-11-17/18 (5 collisions with negative gaps, 6 clear moves with positive gaps, the
+closest 3.0 mm); they are regression tests (`tests/io/fluent/test_rga_clearance.py`).
+
+**Not verified on the instrument** (assumed or estimated in the table):
+
+- The height of the open tube caps above the POGO (assumed top 160 mm).
+- The WIDE grip height at `Regrip_Pos` (assumed 9.1 mm, as the NARROW approach; the WIDE move of 16:32 was refused
+  by FluentControl at Z 64). With it the model finds the gripper block of the WIDE grip about 10 mm (in X) over the
+  CPLC (slot 2), 29 mm below its top, so **the reader transfers (`MeasurePlate`, `MeasureWorktablePlate`) are
+  refused until the WIDE grip is measured** and the table corrected (or the check is turned off for them).
+- The grip height of a plate lid on a plate on the CPLC (`CPLC_Flat_Pos[3]`, assumed 81.6 mm, FluentControl's taught
+  path, not run yet).
+- Object tops estimated from grip heights and definitions: plate with lid 21 mm (plate 18.5), trough 48 / with lid
+  50, a lid lying on its own on a nest 22, the 1000 ul rack 110 / with lid 116 (from FluentControl's own collision
+  report); all on a 7 mm nest.
+- The hotel and incubator interiors (and the reader) are not modelled.
+- The horizontal travel at safe height is left to FluentControl's path planner.
+- What stands on the front right 7 mm nest (X 984, Y 85) is not known; it is modelled as an empty nest.
+- The FluentControl types of the colour-water labware (plates A/B, culture plate, lids) were not available; they
+  are matched by label (`kind_rules`). The tip racks of 50 and 200 ul on the left of the deck and their lids are not
+  in the table (their location names are not known), so moves of those lids are refused as not checkable.
 
 ### Deck state and hands-off (combined server and Fluent server)
 
@@ -341,6 +418,7 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
 | | `PlaceTipRack(Label, TipType, Location, Site, Kind, PlacedBy)` | `PlaceLabware` for a tip rack, with `Kind` "full", "as is" or the well of the next tip of a partly used rack (e.g. "C1"); a rack already at that position counts as refilled in place |
 | | `SetTipRackNextWell(Label, Well, SetBy)` | Record the well of the next tip of a rack on the deck (also at its base position); set in FluentControl at every run start |
 | | `TipRacks` (P) | The racks recorded with `PlaceTipRack` or `SetTipRackNextWell`: tip type, position, recorded state |
+| | `CheckRgaMoves(Moves)` | Check a planned sequence of RGA transfers for collisions against the deck, each applied before the next; moves nothing ([RGA clearance check](#rga-clearance-check-every-server-that-moves-the-rga)) |
 | `HandsOff` | `Begin(Who, Reason, MaxMinutes)` | Hold the shared FluentControl lock for another robot; returns a token. Refused while a run is open or a command is sent. `MaxMinutes` 0 = `deck.hands_off_max_minutes` (30), also the maximum |
 | | `End(Token)` | Release it |
 | | `State` (P) | Who holds hands-off, why, since and until when (also when another server holds it); empty when free |
