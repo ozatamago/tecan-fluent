@@ -193,6 +193,9 @@ class FluentControlBackend:
             sub.cancel()
 
     def _our_channel_open(self) -> bool:
+        # Do not inspect an old COM channel during native method initialization.
+        if self._state() != "RunModeRunning":
+            return False
         c = self._c()
         try:
             return c.ExecutionChannelController.Channel.get() == self.config.api_channel and bool(
