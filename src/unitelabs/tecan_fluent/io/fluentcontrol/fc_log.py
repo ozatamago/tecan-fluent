@@ -110,3 +110,91 @@ def describe(steps: list[dict], rows_of) -> list[str]:
             text += " (takes up " + ", ".join(f"{v:g}" for _, v in sorted(s["aspirated"].items())) + " ul)"
         out.append(text)
     return out
+
+
+# ---- Did an RGA move (RGA1_TransferLabware) really run?
+# On 2026-11-18 (11:28, 11:39, 11:46) ExecuteCommand of an RGA1_TransferLabware that would have put a lid onto the cover
+# site it already occupied returned after 0.015 s, but FluentControl only logged "Received command", "Execute Checks is
+# started" and "RecoveryHandler ... created": the move never started and the run waited until it was stopped by hand.
+# A move that runs logs "Move <label> from <location> position <n> ... to <location> position <n> ..." on the channel
+# ".../Application Driver/RGA 1" within a fraction of a second; a failed one logs "Execution of move failed" there.
+
+RGA_LOG_PS1 = r"""
+$d = 'C:\ProgramData\Tecan\LoggingServer\LogFiles'
+# the log switches to a new file every few tens of minutes; read the current one and the one before it
+$files = Get-ChildItem "$d\*.ulf","$d\*.zlf" | Sort-Object LastWriteTime -Descending | Select-Object -First 2
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$out = foreach ($f in $files) {
+  if ($f.Extension -eq '.zlf') { $z = [System.IO.Compression.ZipFile]::OpenRead($f.FullName); $t = (New-Object System.IO.StreamReader($z.Entries[0].Open())).ReadToEnd(); $z.Dispose() }
+  else { $fs = [System.IO.File]::Open($f.FullName,'Open','Read','ReadWrite'); $t = (New-Object System.IO.StreamReader($fs)).ReadToEnd(); $fs.Close() }
+  foreach ($m in [regex]::Matches($t, '<Log [^>]*>')) {
+    $tag = $m.Value
+    $ts = [regex]::Match($tag, 'TimeStamp="([^"]*)"').Groups[1].Value
+    if ($ts -lt '__SINCE__') { continue }
+    $ch = [regex]::Match($tag, 'Channel="([^"]*)"').Groups[1].Value
+    $msg = [regex]::Match($tag, 'Message="([^"]{0,400})').Groups[1].Value
+    if ($msg.StartsWith('Received command') -or $ch -like '*Application Driver*' -or $msg -like '*move failed*') {
+      $sv = [regex]::Match($tag, 'Severity="([^"]*)"').Groups[1].Value
+      $msg = $msg -replace '&#xD;&#xA;',' ' -replace '&#xA;',' ' -replace '&amp;','&' -replace '&lt;','<' -replace '&gt;','>' -replace '&quot;','"' -replace '\s+',' '
+      $ts + "`t" + $sv + "`t" + $ch + "`t" + $msg
+    }
+  }
+}
+$out | Sort-Object -Unique
+"""  # noqa: E501 - PowerShell sent as is
+"""Log lines (time, severity, channel, message; tab separated) since __SINCE__ (PC local time) that tell whether an RGA
+move ran: the commands received over the API and what the application drivers (RGA 1) logged."""
+
+RGA_MACRO = "RGA1_TransferLabware"
+RGA_MOVE = re.compile(r"^Move (.+?) from (.+?) to (.+?)(?:\.|$)")
+RGA_LABWARE = re.compile(r"Labware&(?:amp;)*gt;(.*?)&(?:amp;)*lt;/Labware&")
+
+
+def rga_labware(xml: str) -> str:
+    """The labware an RGA1_TransferLabware statement moves ("" if it cannot be found)."""
+    m = RGA_LABWARE.search(xml)
+    return m.group(1).strip() if m else ""
+
+
+def rga_move_outcome(log_text: str, labware: str = "") -> dict:
+    """What the log (lines from RGA_LOG_PS1, read from just before the command was sent) says about the first
+    RGA1_TransferLabware received in it.
+
+    status: "moved" (a "Move <labware> from ... to ..." line followed it), "failed" ("Execution of move failed", or
+    the RGA moved other labware), "not_moved" (received, but no move was logged) or "not_logged" (no RGA command was
+    received in the log yet). Lines after the next received command are not looked at."""
+    received = ""
+    move: dict | None = None
+    failures: list[str] = []
+    for raw in log_text.splitlines():
+        parts = raw.split("\t", 3)
+        if len(parts) < 4:
+            continue
+        stamp, severity, channel, msg = (p.strip() for p in parts)
+        if msg.startswith("Received command"):
+            if received:
+                break  # the next command
+            if RGA_MACRO in msg:
+                received = stamp
+            continue
+        if not received:
+            continue
+        m = RGA_MOVE.match(msg)
+        if m and "RGA" in channel and move is None:
+            move = {"time": stamp, "labware": m.group(1), "from": m.group(2), "to": m.group(3)}
+        elif "move failed" in msg.lower() and "Application Driver" in channel and severity in ("Error", "Critical"):
+            failures.append(f"{stamp} {msg}")
+    if not received:
+        return {"status": "not_logged"}
+    result: dict = {"status": "moved", "received": received}
+    if move is not None:
+        result["move"] = move
+    if failures:
+        result["status"] = "failed"
+        result["errors"] = failures[:5]
+    elif move is None:
+        result["status"] = "not_moved"
+    elif labware and move["labware"] != labware:
+        result["status"] = "failed"
+        result["errors"] = [f"the RGA moved {move['labware']}, not {labware}"]
+    return result

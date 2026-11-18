@@ -34,6 +34,7 @@ from unitelabs.cdk.config import Config
 from ..odtc.macros import odtc_macro_xml
 from .definitions import DefinitionCheckFailed, DefinitionsConfig, Preflight
 from .errors import BackendError
+from .fc_log import RGA_LOG_PS1, RGA_MACRO, rga_labware, rga_move_outcome
 from .shared_lock import SharedLock
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,14 @@ class FluentBackendConfig(Config):
     shared_lock: str = ""
     """Lock file shared by every server on the Fluent PC (e.g. C:\\Users\\Tecan\\OFML\\state\\fluentcontrol.lock), so
     that only one server at a time sends to FluentControl or keeps a run open. Empty: no lock (one server only)."""
+    verify_rga_moves: bool = True
+    """After each RGA move (RGA1_TransferLabware), confirm from FluentControl's log that the move really ran, and fail
+    the operation if it did not (2026-11-18: ExecuteCommand returned after 0.015 s for a move that never started)."""
+    rga_log_wait_s: float = 10.0
+    """How long to keep re-reading the log for the move of an RGA command before deciding it did not run."""
+    rga_min_seconds: float = 1.0
+    """An RGA move whose ExecuteCommand returned faster than this is noted as suspicious in the record (a real move
+    takes several seconds)."""
 
 
 class FluentControlBackend:
@@ -237,6 +246,7 @@ class FluentControlBackend:
             raise BackendError(str(exc)) from None
         if self._session:
             self._session["commands"] += 1
+        checks: list[dict] = []
         try:
             if self.config.dry_run:
                 if deck is not None:
@@ -248,21 +258,26 @@ class FluentControlBackend:
                 time.sleep(self.config.dry_run_seconds)
                 durations = [0.0 for _ in steps]
             elif self._session:
-                durations = self._execute(steps, report)
+                durations = self._execute(steps, report, checks)
             else:
                 self._open_run(report)
                 try:
                     if deck is not None:
                         self._deck_send(deck, report)
-                    durations = self._execute(steps, report)
+                    durations = self._execute(steps, report, checks)
                 finally:
                     self._close_run(report)
         except Exception as exc:
             if deck is not None and not deck[3]:
                 deck[1].finish({"status": "not sent", "reason": f"{type(exc).__name__}: {exc}"})
-            record.finish({"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+            failed = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+            if checks:
+                failed["rga_checks"] = checks
+            record.finish(failed)
             raise
         result = {"status": "ok", "seconds": durations, "in_open_run": bool(self._session)}
+        if checks:
+            result["rga_checks"] = checks
         if post is not None and not self.config.dry_run:
             # e.g. what FluentControl's log says the commands did; added to the record, never fails the operation
             try:
@@ -385,15 +400,88 @@ class FluentControlBackend:
             report(f"waiting channel ({state})")
             time.sleep(2)
 
-    def _execute(self, steps: list[tuple[str, str]], report) -> list[float]:
+    def _execute(self, steps: list[tuple[str, str]], report, checks: list | None = None) -> list[float]:
+        """Send the commands in order. With checks (a list), every RGA move is confirmed from FluentControl's log
+        afterwards (see _confirm_rga_move) and what was found is appended to it; a move that did not run raises."""
         c = self._c()
         durations: list[float] = []
         for label, xml in steps:
             report(label)
+            verify = checks is not None and self.config.verify_rga_moves and RGA_MACRO in xml
+            since = self._pc_now() if verify else ""
             t0 = time.monotonic()
             c.ExecutionChannelController.ExecuteCommand(xml)
             durations.append(time.monotonic() - t0)
+            if verify:
+                self._confirm_rga_move(label, xml, since, durations[-1], report, checks)
         return durations
+
+    # ---- Did an RGA move really run? (fc_log.rga_move_outcome)
+    def _pc_now(self) -> str:
+        """The Fluent PC's local time in the log's format ("" if it cannot be read)."""
+        try:
+            return (
+                self.preflight.pc.run_ps("Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'", 60).decode("utf-8-sig").strip()
+            )
+        except Exception as exc:  # noqa: BLE001 - only the check suffers
+            logger.warning("Could not read the Fluent PC time for checking an RGA move: %s", exc)
+            return ""
+
+    def _read_rga_log(self, since: str) -> str:
+        """FluentControl's log lines since a Fluent PC time that tell whether an RGA move ran (fc_log.RGA_LOG_PS1)."""
+        return self.preflight.pc.run_ps(RGA_LOG_PS1.replace("__SINCE__", since), 120).decode(
+            "utf-8-sig", errors="replace"
+        )
+
+    def _confirm_rga_move(self, label: str, xml: str, since: str, seconds: float, report, checks: list) -> None:
+        """Confirm from FluentControl's log that the RGA move just sent really ran.
+
+        ExecuteCommand can return without FluentControl having moved anything: on 2026-11-18 it returned after
+        0.015 s for a lid put onto the cover site it already occupied, FluentControl logged only "Received command"
+        and the run waited until it was stopped by hand, but the operation was reported as done. Raises BackendError
+        when the command was received and no move (or a failed move) was logged. When the log cannot be read or does
+        not show the command yet, the operation is not blocked; the entry appended to checks (the record) says so."""
+        labware = rga_labware(xml)
+        entry: dict = {"step": label, "labware": labware, "seconds": round(seconds, 3)}
+        checks.append(entry)
+        if seconds < self.config.rga_min_seconds:
+            entry["suspiciously_fast"] = True
+            logger.warning("ExecuteCommand of %s returned after %.3f s, too fast for an RGA move", label, seconds)
+        if not since:
+            entry["checked"] = False
+            entry["reason"] = "the Fluent PC time could not be read, so the log was not checked"
+            return
+        deadline = time.monotonic() + self.config.rga_log_wait_s
+        while True:
+            try:
+                outcome = rga_move_outcome(self._read_rga_log(since), labware)
+            except Exception as exc:  # noqa: BLE001 - an unreadable log does not block the operation
+                logger.warning("Could not read FluentControl's log to check %s: %s", label, exc)
+                entry["checked"] = False
+                entry["reason"] = f"FluentControl's log could not be read: {type(exc).__name__}: {exc}"
+                return
+            if outcome["status"] in ("moved", "failed") or time.monotonic() >= deadline:
+                break
+            report(f"checking the log for {label}")
+            time.sleep(2)
+        entry.update(outcome)
+        entry["checked"] = outcome["status"] != "not_logged"
+        if outcome["status"] == "not_logged":
+            entry["reason"] = "the command does not appear in FluentControl's log, so the move could not be confirmed"
+            logger.warning("Could not confirm %s: not in FluentControl's log", label)
+        elif outcome["status"] == "not_moved":
+            raise BackendError(
+                f"FluentControl received {label} at {outcome['received']} but did not move anything "
+                f"(ExecuteCommand returned after {seconds:.3f} s and its log shows no move of "
+                f"{labware or 'the labware'}). "
+                "FluentControl may still be waiting on this command: check it, and end or stop the run "
+                "before going on. Nothing was recorded as moved."
+            )
+        elif outcome["status"] == "failed":
+            raise BackendError(
+                f"FluentControl's log shows that {label} did not complete: {' / '.join(outcome.get('errors', []))}. "
+                "Nothing was recorded as moved."
+            )
 
     def _close_run(self, report) -> None:
         """End the run and return to idle. Failures are logged, not raised (used in cleanup)."""
