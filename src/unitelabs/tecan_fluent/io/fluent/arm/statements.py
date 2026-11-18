@@ -70,12 +70,13 @@ def get_tips_xml(tip_type: str, channels: list[int], rack: str = "") -> str:
 
 
 def set_next_tip_position_xml(rack: str, well: str, rows: int = TIP_RACK_ROWS, columns: int = TIP_RACK_COLUMNS) -> str:
-    """FluentControl's "Set Available Tips (Worktable)": the next GetTips takes tips from this rack starting at well.
+    """FluentControl's "Set Available Tips (Worktable)" for one well: ONLY that well of the rack becomes available.
 
-    FluentControl uses the tips of a rack column-wise (A1, B1, ..., H1, A2, ...), so setting C1 marks A1 and B1 as
-    used. The setting holds only in the open run: every run start registers the racks as full again. Refused by
-    FluentControl ("Could not find labware '...' on worktable.") when the rack is not on the run's worktable. Form
-    accepted by FluentControl 2026-11-18 (inside an open run; the next GetTips took the tip at C1)."""
+    It does not mean "start at this well": on 2026-11-18, after C1 alone was set, the next GetTips took C1 and the
+    one after it raised FCA_RTE_004_001 ("Please replace 'FCA, 50ul SBS' on the worktable"). So it is sent before every
+    GetTips that should take from the rack. A list of several wells has not been tried. Every run start registers the
+    racks as full again. Refused by FluentControl ("Could not find labware '...' on worktable.") when the rack is not on
+    the run's worktable. Form accepted by FluentControl 2026-11-18 inside an open run."""
     name = well.strip().upper()
     index = well_index(name, rows, columns)
     return wrap(

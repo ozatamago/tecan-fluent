@@ -309,3 +309,53 @@ def test_tips_taken_are_read_from_get_tips_entries_of_the_log():
     assert tips_taken((FIX / "fc_log_worklist.txt").read_text(encoding="utf-8")) == {"FCA_ 200ul SBS[001]": [77, 78]}
     assert tips_taken(GET_TIPS_LOG) == {"FCA_ 200ul SBS[009]": [2, 3]}
     assert tips_taken("") == {}
+
+
+def test_get_tips_from_a_partial_rack_sets_its_next_well_right_before(tmp_path):
+    # Set Available Tips marks only the given well as available (2026-11-18: the GetTips after the next one raised
+    # FCA_RTE_004_001), so it is sent again before every GetTips from the rack, in the same operation
+    lh, _lc, backend = _setup()
+    S = _S()
+    d = _deck_with_partial_rack(tmp_path)
+    backend.deck = d
+    rack = "FCA_ 200ul SBS[009]"
+    sent = []
+    run_steps = backend.run_steps
+
+    async def capture(steps, *args, **kwargs):
+        sent.append(list(steps))
+        return await run_steps(steps, *args, **kwargs)
+
+    backend.run_steps = capture
+
+    async def scenario():
+        await backend.start_run()
+        with pytest.raises(LiquidHandlingFailed, match="one tip at a time"):
+            await lh.get_tips("FCA, 200ul SBS", [1, 2], rack, status=S)
+        await lh.get_tips("FCA, 200ul SBS", [1], rack, status=S)
+        await lh.drop_tips([1], status=S)
+        d.tips_taken({rack: [2]}, [rack], "GetTips")  # what the log says on the instrument (not read in a dry run)
+        await lh.get_tips("FCA, 200ul SBS", [1], rack, status=S)
+        await lh.drop_tips([1], status=S)
+        await lh.get_tips("FCA, 200ul SBS", [1], "FCA_ 200ul SBS[001]", status=S)  # not followed: GetTips only
+        await lh.drop_tips([1], status=S)
+        await backend.end_run()
+
+    asyncio.run(scenario())
+    gets = [steps for steps in sent if any(label.startswith("GetTips") for label, _ in steps)]
+    assert gets == [
+        [
+            (f"SetNextTipPosition {rack} C1 (deck state)", set_next_tip_position_xml(rack, "C1")),
+            (f"GetTips FCA, 200ul SBS ch[1] from {rack}", get_tips_xml("FCA, 200ul SBS", [1], rack)),
+        ],
+        [
+            (f"SetNextTipPosition {rack} D1 (deck state)", set_next_tip_position_xml(rack, "D1")),
+            (f"GetTips FCA, 200ul SBS ch[1] from {rack}", get_tips_xml("FCA, 200ul SBS", [1], rack)),
+        ],
+        [
+            (
+                "GetTips FCA, 200ul SBS ch[1] from FCA_ 200ul SBS[001]",
+                get_tips_xml("FCA, 200ul SBS", [1], "FCA_ 200ul SBS[001]"),
+            )
+        ],
+    ]

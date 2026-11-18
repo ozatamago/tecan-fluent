@@ -375,16 +375,24 @@ instrument. Design: [docs/deck_state_spec.md](docs/deck_state_spec.md); code: `i
   run start registers the racks as full. A rack recorded with the well of its next tip ("partial", from
   `PlaceTipRack` with the well as `Kind`, or `SetTipRackNextWell`) is registered like a full one where it is not at
   its base position and then gets FluentControl's "Set Available Tips (Worktable)"
-  (`SetNextTipPositionStatement`) for that well at every run start, at its base position too. `GetTips`, the Smart
+  (`SetNextTipPositionStatement`) for that well at every run start, at its base position too. The statement marks
+  ONLY that well as available (2026-11-18: after C1 alone was set, the GetTips after the next one raised
+  FCA_RTE_004_001 "Please replace ... on the worktable"), so `LiquidHandling.GetTips` naming a partial rack sends it
+  again right before the GetTips statement (one channel at a time; the Smart Commands and worklists cannot take more
+  than one tip from a partial rack). `GetTips`, the Smart
   Commands and worklists of `LiquidHandling` read from FluentControl's log which tips they took from such racks (and
   from full racks away from their base position, which then become partial) and move the recorded well on; inside a
   run FluentControl's own count is authoritative. When the log shows no tips taken by a command that succeeded, the
   racks it may have used count as "used". Tips taken any other way (a GUI script, raw XML) are not seen: record the
   well again. A rack at its base position without a recorded well keeps FluentControl's own count.
-- `LiquidHandling.SetNextTipPosition(Rack, Well)` sends the same statement inside an open run (verified on the
-  instrument 2026-11-18: the next GetTips took the tip at C1); FluentControl refuses a rack that is not on the run's
-  worktable ("Could not find labware '...' on worktable."). It holds for that run only, unless the deck state
-  follows the rack (its recorded well is set too).
+- `LiquidHandling.SetNextTipPosition(Rack, Well)` sends the same statement inside an open run: only that well becomes
+  available, so set it before every GetTips that should take from the rack. FluentControl refuses a rack that is not
+  on the run's worktable ("Could not find labware '...' on worktable."). For a rack the deck state follows, its
+  recorded well is set too.
+- **GetTips' `Rack` is not binding in FluentControl**: it takes tips from any rack of that tip type it counts as
+  available, and after "Continue" on FCA_RTE_004_001 it counts every rack of the type as full (2026-11-18: it went
+  to a rack with a lid, FCA_RTE_002_001, and the run was aborted). Take racks of the same tip type that must not be
+  used out of FluentControl's record (`Deck.RemoveLabware`) before the run.
 - Changes to the layout are refused while a run is open (FluentControl's run already has its layout) or while
   another server sends; they are allowed while hands-off is held, which is when the deck should be changed.
 - **Hands-off** is the shared lock held on behalf of `Who`: every server on the Fluent PC refuses FluentControl

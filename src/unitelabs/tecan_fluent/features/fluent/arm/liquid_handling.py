@@ -21,11 +21,19 @@ instrument):
 The record of each command gets the liquid class settings for the mounted tip type (speeds, air gaps, liquid level
 detection, positions) under "liquid_class_settings".
 
-SetNextTipPosition sends FluentControl's "Set Available Tips (Worktable)" in the open run. FluentControl uses the tips
-of a rack column-wise (A1, B1, ..., H1, A2, ...) and registers every rack as full at each run start, so the setting
-holds for the open run only; racks recorded in the deck state with the well of their next tip (Deck.PlaceTipRack,
-Deck.SetTipRackNextWell) get it at every run start. GetTips, the Smart Commands and worklists read from FluentControl's
-log which tips they took from such racks and move the recorded next tip on (_TipFollower).
+SetNextTipPosition sends FluentControl's "Set Available Tips (Worktable)" in the open run. It marks ONLY the given
+well of the rack as available, not "start here" (2026-11-18: after C1 alone was set, the GetTips after the next one
+raised FCA_RTE_004_001 "Please replace 'FCA, 50ul SBS' on the worktable"); a list of several wells has not been tried.
+Every run start registers the racks as full again. So for a rack the deck state follows with the well of its next tip
+(Deck.PlaceTipRack, Deck.SetTipRackNextWell), GetTips naming it sends the statement for that one well right before the
+GetTips statement (one channel only), besides the statement at every run start. GetTips, the Smart Commands and
+worklists read from FluentControl's log which tips they took from such racks and move the recorded next tip on
+(_TipFollower).
+
+GetTips' Rack is not binding in FluentControl: it takes tips from any rack of that tip type it counts as available
+(2026-11-18: after "Continue" on FCA_RTE_004_001 it counted every rack of the type as full and went to a rack with a
+lid, FCA_RTE_002_001, and the run was aborted). Racks of the same tip type that must not be used have to be taken out
+of FluentControl's record (Deck.RemoveLabware).
 """
 
 import asyncio
@@ -304,11 +312,20 @@ class LiquidHandling(sila.Feature):
         )
 
     async def _send(
-        self, label: str, xml: str, status: sila.Status, extra: dict | None = None, post=None, tips=None
+        self,
+        label: str,
+        xml: str,
+        status: sila.Status,
+        extra: dict | None = None,
+        post=None,
+        tips=None,
+        before: list[tuple[str, str]] | None = None,
     ) -> None:
+        """Send one statement (after the statements in before, in the same operation and record)."""
+        steps = [*(before or []), (label, xml)]
         try:
             await with_progress(
-                status, 1, lambda report: self.backend.run_steps([(label, xml)], report, label, extra, post)
+                status, len(steps), lambda report: self.backend.run_steps(steps, report, label, extra, post)
             )
         except BackendError as exc:
             if tips is not None:
@@ -316,6 +333,20 @@ class LiquidHandling(sila.Feature):
             raise LiquidHandlingFailed(str(exc)) from None
 
     # ---- the next tip of the racks the deck state follows
+    def _recorded_next_well(self, rack: str) -> str:
+        """The well of the next tip the deck state records for this rack (a partial rack on the deck), or ""."""
+        deck = self.backend.deck
+        if deck is None or not rack:
+            return ""
+        try:
+            e = deck.entry(rack) or {}
+        except BackendError as exc:
+            raise LiquidHandlingFailed(f"Cannot read the deck state for {rack}: {exc}") from None
+        tips = e.get("tips") or {}
+        if e.get("location") is None or tips.get("kind") != "partial":
+            return ""
+        return tips.get("next_well") or ""
+
     def _tip_follower(self, tip_type: str, rack: str, source: str) -> "_TipFollower | None":
         """A follower for the tracked racks this command may take tips from (the named rack, or every tracked rack of
         the tip type), or None (none tracked, no deck state, or a dry run)."""
@@ -377,14 +408,25 @@ class LiquidHandling(sila.Feature):
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
     async def get_tips(self, tip_type: str, channels: list[int], rack: str, *, status: sila.Status) -> None:
         """
-        Pick up disposable tips on the given channels (FluentControl takes the next unused tips, column-wise: A1, B1,
-        ..., H1, A2, ...; SetNextTipPosition chooses where it starts). MOVES the arm.
+        Pick up disposable tips on the given channels (FluentControl takes the next tips it counts as available,
+        column-wise: A1, B1, ..., H1, A2, ...). MOVES the arm.
+
+        WARNING: Rack is not binding in FluentControl. It takes tips from any rack of this tip type that it counts as
+        available, and after "Continue" on "Please replace ... on the worktable" (FCA_RTE_004_001) it counts every
+        rack of the type as full (2026-11-18: it then went to a rack with a lid and the run was aborted). Take racks
+        of the same tip type that must not be used out of FluentControl's record (Deck.RemoveLabware) before the run.
+
+        When the deck state follows the named rack with the well of its next tip (a partly used rack), FluentControl's
+        "Set Available Tips" for that one well is sent right before the GetTips statement, in the same operation:
+        the statement marks only that well as available, so only one channel can take a tip from such a rack. The
+        well actually taken is read from FluentControl's log and the recorded next tip moves on.
 
         Args:
           TipType: "FCA, 10ul SBS", "FCA, 50ul SBS", "FCA, 50ul Filtered SBS", "FCA, 200ul SBS",
             "FCA, 200ul Filtered SBS", "FCA, 1000ul SBS" or "FCA, 1000ul Filtered SBS".
-          Channels: Channels 1-8 that get a tip, e.g. [1].
-          Rack: Rack to take the tips from, e.g. "FCA_ 1000ul SBS[002]", or empty to let FluentControl choose.
+          Channels: Channels 1-8 that get a tip, e.g. [1]. One channel for a partly used rack.
+          Rack: Rack to take the tips from, e.g. "FCA_ 1000ul SBS[002]", or empty to let FluentControl choose (not
+            binding, see above).
         """
         self._need_run()
         self._refresh()
@@ -399,14 +441,26 @@ class LiquidHandling(sila.Feature):
         except DefinitionCheckFailed as exc:
             raise LiquidHandlingFailed(str(exc)) from None
         label = f"GetTips {tip_type} ch{channels}" + (f" from {rack}" if rack else "")
+        next_well = await asyncio.to_thread(self._recorded_next_well, rack)
+        before = []
+        if next_well:
+            if len(channels) != 1:
+                raise LiquidHandlingFailed(
+                    f"{rack} is a partly used rack (next tip {next_well}): FluentControl's Set Available Tips marks "
+                    "one well only, so take one tip at a time from it (one channel)"
+                )
+            before = [
+                (f"SetNextTipPosition {rack} {next_well} (deck state)", set_next_tip_position_xml(rack, next_well))
+            ]
         tips = await asyncio.to_thread(self._tip_follower, tip_type, rack, label)
         await self._send(
             label,
             get_tips_xml(tip_type, channels, rack),
             status,
-            {"tip": {"type": tip_type, **values}},
+            {"tip": {"type": tip_type, **values}, **({"next_tip_set": {rack: next_well}} if next_well else {})},
             (lambda: tips.after(tips.read())) if tips is not None else None,
             tips,
+            before,
         )
         for c in channels:
             self.backend.tips[c] = {
@@ -556,19 +610,20 @@ class LiquidHandling(sila.Feature):
     @sila.ObservableCommand(errors=[LiquidHandlingFailed])
     async def set_next_tip_position(self, rack: str, well: str, *, status: sila.Status) -> None:
         """
-        Set where the next GetTips takes tips from a rack (FluentControl's "Set Available Tips (Worktable)"). Does not
-        move the arm. Only inside a run opened with RunControl.StartRun.
+        Mark one well of a rack as available (FluentControl's "Set Available Tips (Worktable)"). Does not move the
+        arm. Only inside a run opened with RunControl.StartRun.
 
-        FluentControl uses the tips of a rack column-wise (A1, B1, ..., H1, A2, ...): setting C1 marks A1 and B1 as
-        used. The setting holds for the open run only, because every run start registers the racks as full again;
-        to keep it across runs record it in the deck state (Deck.SetTipRackNextWell or Deck.PlaceTipRack with the
-        well as Kind), which sends it at every run start. For a rack the deck state already follows, the recorded
-        next tip is set to this well too. FluentControl refuses a rack that is not on the run's worktable ("Could
-        not find labware '...' on worktable.").
+        Only the given well becomes available, not the wells after it (2026-11-18: after C1 alone was set, the GetTips
+        after the next one raised FCA_RTE_004_001 "Please replace ... on the worktable"), so set it before every
+        GetTips that should take from this rack. Every run start registers the racks as full again. For a rack the
+        deck state follows (Deck.SetTipRackNextWell, Deck.PlaceTipRack with the well as Kind), GetTips does this by
+        itself and the recorded next tip is set to this well too. FluentControl refuses a rack that is not on the
+        run's worktable ("Could not find labware '...' on worktable."). GetTips' Rack is not binding: FluentControl
+        may still take tips from another rack of the same type it counts as available.
 
         Args:
           Rack: Label of the tip rack, e.g. "FCA_ 1000ul SBS[002]".
-          Well: Well of the next tip, e.g. "C1".
+          Well: The well to mark as available, e.g. "C1".
         """
         self._need_run()
         if not rack.strip():

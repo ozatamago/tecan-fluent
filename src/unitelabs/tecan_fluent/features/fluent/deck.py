@@ -165,7 +165,9 @@ class Deck(sila.Feature):
         position a full rack is registered once only; the tips LiquidHandling takes from it in that run are read from
         FluentControl's log and the rack becomes "partial". A partial rack (Kind is the well of its next tip, e.g.
         "C1") is registered at every run start and then gets FluentControl's "Set Available Tips" for that well
-        (FluentControl uses tips column-wise: A1, B1, ..., H1, A2, ...). A rack whose tips taken are unknown counts
+        (FluentControl uses tips column-wise: A1, B1, ..., H1, A2, ...). That statement marks only that one well as
+        available, so LiquidHandling.GetTips naming the rack sends it again before every GetTips (one channel at a
+        time). A rack whose tips taken are unknown counts
         as used, and away from its base position commands that use it are refused until it is recorded again or
         taken off; a rack put back "as is" away from its base position is refused the same way.
 
@@ -190,11 +192,13 @@ class Deck(sila.Feature):
         Record the well of the next tip of a tip rack on the deck (a partly used rack). Moves nothing. Works for a
         rack of the base worktable at its base position too; FluentControl's own count is overridden from then on.
 
-        At every run start, after the registration, FluentControl gets "Set Available Tips" for this well, and the
-        tips LiquidHandling takes from the rack (GetTips, the Smart Commands, worklists) move the recorded well on,
-        read from FluentControl's log. FluentControl uses tips column-wise (A1, B1, ..., H1, A2, ...), so "C1" means
-        A1 and B1 are gone. Tips taken any other way (a GUI script, raw XML) are not seen: record the well again.
-        To give a rack at its base position back to FluentControl's own count, record it with PlaceTipRack.
+        At every run start, after the registration, FluentControl gets "Set Available Tips" for this well, and
+        LiquidHandling.GetTips naming the rack sends it again right before every GetTips (the statement marks only that
+        one well as available, so one channel at a time). The tips LiquidHandling takes from the rack (GetTips, the
+        Smart Commands, worklists) move the recorded well on, read from FluentControl's log. FluentControl uses tips
+        column-wise (A1, B1, ..., H1, A2, ...), so "C1" means A1 and B1 are gone. Tips taken any other way (a GUI
+        script, raw XML) are not seen: record the well again. To give a rack at its base position back to
+        FluentControl's own count, record it with PlaceTipRack.
 
         Args:
           Label: Name of the rack, e.g. "FCA_ 1000ul SBS[002]".

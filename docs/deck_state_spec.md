@@ -83,9 +83,18 @@ read back.
   base-worktable rack at its base position). Recorded as `"tips": {"kind": "partial", "next_well": "C1", ...}`.
 - FluentControl has the statement: "Set Available Tips (Worktable)",
   `Tecan.Core.Scripting.Worktable.SetNextTipPositionStatement` (LabwareName, SelectedWellIndexes column-major from
-  0, SelectedWellsString). Verified 2026-11-18 inside an open run: the next GetTips took the tip at C1. FluentControl
-  uses the tips column-wise (A1, B1, ..., H1, A2, ...). Every run start registers the racks as full, so it is sent
-  at every run start for every partial rack, after the RemoveLabware / AddLabware of the registration.
+  0, SelectedWellsString). It marks ONLY the listed wells as available, not "start here": on 2026-11-18, after C1
+  alone was set on FCA_ 50ul SBS[001], the next GetTips took C1 and the one after it raised FCA_RTE_004_001 ("Please
+  replace 'FCA, 50ul SBS' on the worktable"). A list of several wells has not been tried (FluentControl's own
+  scripts have no example), so only one well is ever sent. FluentControl uses the tips column-wise (A1, B1, ...,
+  H1, A2, ...). Every run start registers the racks as full, so it is sent at every run start for every partial
+  rack, after the RemoveLabware / AddLabware of the registration, and `LiquidHandling.GetTips` naming a partial rack
+  sends it for the recorded next well right before the GetTips statement (same operation and record; one channel
+  only, refused otherwise). The Smart Commands and worklists cannot take more than one tip from a partial rack.
+- GetTips' `Rack` (`LabwareName`) is not binding in FluentControl: it takes tips from any rack of the tip type that
+  it counts as available. After "Continue" on FCA_RTE_004_001 it counted every rack of the type as full and went to
+  a rack with a lid (FCA_ 200ul SBS[001]; FCA_RTE_002_001, the run was aborted). Racks of the same tip type that
+  must not be used have to be taken out of FluentControl's record (`Deck.RemoveLabware`).
 - A rack recorded as "full" is registered at the next run start with `RemoveLabware` + `AddLabware`, so FluentControl
   sees a full rack (a newly added rack is full). Investigate first, on the Fluent 480 and in the FluentControl manual,
   whether FluentControl has a statement that sets the next tip position or refills a rack; if it has, prefer it and

@@ -10,12 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `LiquidHandling.SetNextTipPosition(Rack, Well)`: FluentControl's "Set Available Tips (Worktable)"
-  (`SetNextTipPositionStatement`) inside an open run; FluentControl uses tips column-wise (A1, B1, ..., A2, ...).
+  (`SetNextTipPositionStatement`) inside an open run. It marks ONLY the given well as available (checked on the
+  instrument 2026-11-18), so it has to be set before every GetTips from that rack.
 - Partly used tip racks in the deck state: `Deck.PlaceTipRack` takes the well of the next tip as `Kind`, and
   `Deck.SetTipRackNextWell(Label, Well, SetBy)` records it for a rack on the deck. Such racks get the statement at
-  every run start, after the registration; `GetTips`, the Smart Commands and worklists move the recorded well on
+  every run start, after the registration, and `GetTips` naming such a rack sends it for the recorded next well
+  right before the GetTips statement (one channel only); `GetTips`, the Smart Commands and worklists move the
+  recorded well on
   from FluentControl's log (full racks away from their base position become partial instead of "used" when their
   tips taken are seen). Existing deck.json files are read as before.
+- The GetTips description warns that its `Rack` is not binding in FluentControl (it takes from any rack of the tip
+  type it counts as available); racks of that type that must not be used have to be removed (`Deck.RemoveLabware`).
 - `FCA, 50ul Filtered SBS` among the tip types of `LiquidHandling` (`FCA, 50ul SBS` was accepted already; the
   GetTips description now lists both).
 

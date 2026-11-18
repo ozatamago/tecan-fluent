@@ -27,13 +27,15 @@ every use and written atomically (a temporary file, then replaced):
   new file cannot be written (or in a dry run) the old file keeps being read.
 - In a dry run, changes are kept in memory only (as the labware tracker does).
 
-Tip racks ("tips" of an entry): "kind" is "full" (a fresh rack), "as is" (put back as it was), "partial" (the next
-tip is at "next_well"), "used" (FluentControl no longer knows which tips are left) or "empty". FluentControl uses the
-tips of a rack column-wise (A1, B1, ..., H1, A2, ...) and every run start registers the racks as full, so a partial
-rack gets FluentControl's "Set Available Tips" (SetNextTipPositionStatement) at every run start, after the
-registration. The commands of LiquidHandling that take tips (GetTips, the Smart Commands, worklists) read from
-FluentControl's log which tips were taken from tracked racks and move "next_well" on; inside a run FluentControl's
-own count is authoritative. Tips taken any other way (a GUI script, raw XML) are not seen.
+Tip racks ("tips" of an entry): "kind" is "full" (a fresh rack), "as is" (put back as it was), "partial" (the next tip
+is at "next_well"), "used" (FluentControl no longer knows which tips are left) or "empty". FluentControl uses the tips
+of a rack column-wise (A1, B1, ..., H1, A2, ...) and every run start registers the racks as full, so a partial rack gets
+FluentControl's "Set Available Tips" (SetNextTipPositionStatement) for its next well at every run start, after the
+registration. That statement marks ONLY the given well as available (2026-11-18), so LiquidHandling.GetTips naming a
+partial rack sends it again right before every GetTips (one channel at a time); the Smart Commands and worklists cannot
+take more than that one tip from a partial rack. The commands of LiquidHandling that take tips (GetTips, the Smart
+Commands, worklists) read from FluentControl's log which tips were taken from tracked racks and move "next_well" on;
+inside a run FluentControl's own count is authoritative. Tips taken any other way (a GUI script, raw XML) are not seen.
 """
 
 import contextlib
