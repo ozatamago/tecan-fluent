@@ -330,13 +330,15 @@ def test_get_tips_from_a_partial_rack_sets_its_next_well_right_before(tmp_path):
 
     async def scenario():
         await backend.start_run()
-        with pytest.raises(LiquidHandlingFailed, match="one tip at a time"):
-            await lh.get_tips("FCA, 200ul SBS", [1, 2], rack, status=S)
+        with pytest.raises(LiquidHandlingFailed, match="neighbouring"):
+            await lh.get_tips("FCA, 200ul SBS", [1, 3], rack, status=S)
+        with pytest.raises(LiquidHandlingFailed, match=r"Only 6 tip\(s\) left in column 1 from C1"):
+            await lh.get_tips("FCA, 200ul SBS", [1, 2, 3, 4, 5, 6, 7], rack, status=S)
         await lh.get_tips("FCA, 200ul SBS", [1], rack, status=S)
         await lh.drop_tips([1], status=S)
         d.tips_taken({rack: [2]}, [rack], "GetTips")  # what the log says on the instrument (not read in a dry run)
-        await lh.get_tips("FCA, 200ul SBS", [1], rack, status=S)
-        await lh.drop_tips([1], status=S)
+        await lh.get_tips("FCA, 200ul SBS", [1, 2, 3], rack, status=S)  # D1, E1, F1 with three channels
+        await lh.drop_tips([1, 2, 3], status=S)
         await lh.get_tips("FCA, 200ul SBS", [1], "FCA_ 200ul SBS[001]", status=S)  # not followed: GetTips only
         await lh.drop_tips([1], status=S)
         await backend.end_run()
@@ -349,8 +351,11 @@ def test_get_tips_from_a_partial_rack_sets_its_next_well_right_before(tmp_path):
             (f"GetTips FCA, 200ul SBS ch[1] from {rack}", get_tips_xml("FCA, 200ul SBS", [1], rack)),
         ],
         [
-            (f"SetNextTipPosition {rack} D1 (deck state)", set_next_tip_position_xml(rack, "D1")),
-            (f"GetTips FCA, 200ul SBS ch[1] from {rack}", get_tips_xml("FCA, 200ul SBS", [1], rack)),
+            (
+                f"SetNextTipPosition {rack} D1, E1, F1 (deck state)",
+                set_next_tip_position_xml(rack, ["D1", "E1", "F1"]),
+            ),
+            (f"GetTips FCA, 200ul SBS ch[1, 2, 3] from {rack}", get_tips_xml("FCA, 200ul SBS", [1, 2, 3], rack)),
         ],
         [
             (
@@ -359,3 +364,17 @@ def test_get_tips_from_a_partial_rack_sets_its_next_well_right_before(tmp_path):
             )
         ],
     ]
+
+
+def test_several_tips_are_marked_in_one_set_available_tips():
+    from unitelabs.tecan_fluent.io.fluent.arm.statements import tip_wells_from
+
+    one = set_next_tip_position_xml("R[001]", "C1")
+    assert "<int>2</int>" in one and "<SelectedWellsString>C1</SelectedWellsString>" in one
+    three = set_next_tip_position_xml("R[001]", ["G4", "H4", "A5"])
+    assert three.count("<int>") == 3 and "<int>30</int>" in three and "<int>31</int>" in three and "<int>32</int>" in three
+    assert "<SelectedWellsString>G4 - A5</SelectedWellsString>" in three  # consecutive indexes: the GUI's range form
+    assert "<SelectedWellsString>A9, C9</SelectedWellsString>" in set_next_tip_position_xml("R[001]", ["A9", "C9"])
+    assert tip_wells_from("F4", 3) == ["F4", "G4", "H4"]
+    with pytest.raises(Exception, match="Only 2 tip"):
+        tip_wells_from("G4", 3)

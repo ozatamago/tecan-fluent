@@ -50,6 +50,7 @@ from ....io.fluent.arm.statements import (
     move_arm_xml,
     pipetting_xml,
     set_next_tip_position_xml,
+    tip_wells_from,
     well_index,
 )
 from ....io.fluentcontrol.backend import BackendError, FluentControlBackend
@@ -417,14 +418,16 @@ class LiquidHandling(sila.Feature):
         of the same tip type that must not be used out of FluentControl's record (Deck.RemoveLabware) before the run.
 
         When the deck state follows the named rack with the well of its next tip (a partly used rack), FluentControl's
-        "Set Available Tips" for that one well is sent right before the GetTips statement, in the same operation:
-        the statement marks only that well as available, so only one channel can take a tip from such a rack. The
-        well actually taken is read from FluentControl's log and the recorded next tip moves on.
+        "Set Available Tips" for the wells the channels take (the next tip and the ones below it in the same column,
+        one per channel) is sent right before the GetTips statement, in the same operation: the statement marks only
+        those wells as available. Use neighbouring channels; they must fit in the rest of the column. The wells
+        actually taken are read from FluentControl's log and the recorded next tip moves on.
 
         Args:
           TipType: "FCA, 10ul SBS", "FCA, 50ul SBS", "FCA, 50ul Filtered SBS", "FCA, 200ul SBS",
             "FCA, 200ul Filtered SBS", "FCA, 1000ul SBS" or "FCA, 1000ul Filtered SBS".
-          Channels: Channels 1-8 that get a tip, e.g. [1]. One channel for a partly used rack.
+          Channels: Channels 1-8 that get a tip, e.g. [1]. Neighbouring channels for a partly used rack, as many as
+            tips are left in the column of its next tip.
           Rack: Rack to take the tips from, e.g. "FCA_ 1000ul SBS[002]", or empty to let FluentControl choose (not
             binding, see above).
         """
@@ -444,13 +447,20 @@ class LiquidHandling(sila.Feature):
         next_well = await asyncio.to_thread(self._recorded_next_well, rack)
         before = []
         if next_well:
-            if len(channels) != 1:
+            if channels != list(range(channels[0], channels[0] + len(channels))):
                 raise LiquidHandlingFailed(
-                    f"{rack} is a partly used rack (next tip {next_well}): FluentControl's Set Available Tips marks "
-                    "one well only, so take one tip at a time from it (one channel)"
+                    f"{rack} is a partly used rack (next tip {next_well}): take tips from it with neighbouring "
+                    f"channels (e.g. [1, 2, 3]), not {channels}"
                 )
+            try:
+                wells = tip_wells_from(next_well, len(channels))
+            except BackendError as exc:
+                raise LiquidHandlingFailed(f"{rack}: {exc}") from None
             before = [
-                (f"SetNextTipPosition {rack} {next_well} (deck state)", set_next_tip_position_xml(rack, next_well))
+                (
+                    f"SetNextTipPosition {rack} {', '.join(wells)} (deck state)",
+                    set_next_tip_position_xml(rack, wells),
+                )
             ]
         tips = await asyncio.to_thread(self._tip_follower, tip_type, rack, label)
         await self._send(

@@ -69,32 +69,60 @@ def get_tips_xml(tip_type: str, channels: list[int], rack: str = "") -> str:
     return wrap(xml)
 
 
-def set_next_tip_position_xml(rack: str, well: str, rows: int = TIP_RACK_ROWS, columns: int = TIP_RACK_COLUMNS) -> str:
-    """FluentControl's "Set Available Tips (Worktable)" for one well: ONLY that well of the rack becomes available.
+def set_next_tip_position_xml(
+    rack: str, well: str | list[str], rows: int = TIP_RACK_ROWS, columns: int = TIP_RACK_COLUMNS
+) -> str:
+    """FluentControl's "Set Available Tips (Worktable)": ONLY the given well(s) of the rack become available.
 
     It does not mean "start at this well": on 2026-11-18, after C1 alone was set, the next GetTips took C1 and the
     one after it raised FCA_RTE_004_001 ("Please replace 'FCA, 50ul SBS' on the worktable"). So it is sent before every
-    GetTips that should take from the rack. A list of several wells has not been tried. Every run start registers the
-    racks as full again. Refused by FluentControl ("Could not find labware '...' on worktable.") when the rack is not on
-    the run's worktable. Form accepted by FluentControl 2026-11-18 inside an open run."""
-    name = well.strip().upper()
-    index = well_index(name, rows, columns)
+    GetTips that should take from the rack. Several wells (a list, for a GetTips with several channels) are written
+    as one index per well and SelectedWellsString in the GUI's forms ("G4 - H4", "A9, C9"); one well alone was
+    accepted by FluentControl 2026-11-18 inside an open run. Every run start registers the racks as full again.
+    Refused by FluentControl ("Could not find labware '...' on worktable.") when the rack is not on the run's
+    worktable."""
+    names = [w.strip().upper() for w in ([well] if isinstance(well, str) else well)]
+    if not names:
+        raise BackendError("Give at least one well")
+    indexes = [well_index(n, rows, columns) for n in names]
+    if len(set(indexes)) != len(indexes):
+        raise BackendError(f"Wells repeat: {', '.join(names)}")
+    if len(names) == 1:
+        text = names[0]
+    elif all(b - a == 1 for a, b in zip(indexes, indexes[1:], strict=False)):
+        text = f"{names[0]} - {names[-1]}"
+    else:
+        text = ", ".join(names)
+    items = "".join(f'<Object Type="System.Int32">\n<int>{i}</int>\n</Object>\n' for i in indexes)
     return wrap(
         '<Object Type="Tecan.Core.Scripting.Worktable.SetNextTipPositionStatement">\n'
         "<SetNextTipPositionStatement>\n"
         f"<LabwareName>{_esc(rack)}</LabwareName>\n"
         "<SelectedWellIndexes>\n"
-        '<Object Type="System.Int32">\n'
-        f"<int>{index}</int>\n"
-        "</Object>\n"
+        f"{items}"
         "</SelectedWellIndexes>\n"
-        f"<SelectedWellsString>{name}</SelectedWellsString>\n"
+        f"<SelectedWellsString>{_esc(text)}</SelectedWellsString>\n"
         "<IsBreakpoint>False</IsBreakpoint>\n"
         "<IsDisabledForExecution>False</IsDisabledForExecution>\n"
         "<LineNumber>1</LineNumber>\n"
         "</SetNextTipPositionStatement>\n"
         "</Object>"
     )
+
+
+def tip_wells_from(next_well: str, count: int, rows: int = TIP_RACK_ROWS, columns: int = TIP_RACK_COLUMNS) -> list[str]:
+    """The count tips of a partly used rack from its next tip on, down the same column (A1, B1, ... H1): the wells
+    one GetTips with count neighbouring channels takes. Raises when they do not fit in the rest of the column."""
+    idx = well_index(next_well, rows, columns)
+    row, col = idx % rows, idx // rows
+    if count < 1:
+        raise BackendError("Take at least one tip")
+    if row + count > rows:
+        raise BackendError(
+            f"Only {rows - row} tip(s) left in column {col + 1} from {next_well.strip().upper()}: take at most that "
+            "many in one GetTips (the rest from the next column with another GetTips)"
+        )
+    return [f"{chr(ord('A') + r)}{col + 1}" for r in range(row, row + count)]
 
 
 def move_arm_xml(labware: str, well: str, channels: list[int], rows: int, columns: int) -> str:
