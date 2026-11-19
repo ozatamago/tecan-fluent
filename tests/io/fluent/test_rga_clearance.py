@@ -392,3 +392,19 @@ def test_other_workflows_are_checked_rather_than_refused():
     assert (r.ends[0].grip_z, r.ends[0].grip_status) == (74.4, "derived") and not r.ends[1].modelled
     r = rc.check_transfer(GEO, snap, "ODTC_Lid[001]", rc.Destination("ODTC_96_Pos", 1), MARGIN)
     assert r.verdict == "ok" and not any(e.modelled for e in r.ends)
+
+
+def test_a_lid_added_at_the_cover_site_of_a_plate_stands_on_it():
+    """AddLabware of a lid with Location GetCoverSiteName("plate") (as the test scripts register lids at run start):
+    the lid must be found on its plate, so that taking it off can be checked (2026-11-19, simulation run)."""
+    from unitelabs.tecan_fluent.io.fluent.gripper.statements import add_labware_xml, transfer_xml
+
+    deck = _deck()
+    deck.pop("PlateB_Lid[001]", None)
+    deck["Rack1000[001]"] = {**deck["Rack1000[001]"], "site": 1}
+    snap = rc.snapshot(deck)
+    rc.apply_statement(snap, add_labware_xml("Lid_9mm_Custom", "PlateB_Lid[001]", 'GetCoverSiteName("PlateB[001]")', 2))
+    assert snap.items["PlateB_Lid[001]"].on == "PlateB[001]"
+    [r] = rc.check_steps(GEO, snap, [("m", transfer_xml("PlateB_Lid[001]", "HotelMP_Pos", 3))], MARGIN)
+    assert r.verdict != "not checked", r.summary()
+    assert "on PlateB[001] at Nest7mm_Pos[2]" in r.source and r.verdict == "ok", r.summary()

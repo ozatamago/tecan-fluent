@@ -631,10 +631,15 @@ def _labware_statement(xml: str) -> tuple[str, Item | None] | None:
             ltype = re.search(r"<LabwareType>([^<]*)</LabwareType>", t)
             loc = re.search(r"<Location>([^<]*)</Location>", t)
             pos = re.search(r"<Position>(\d+)</Position>", t)
+            location = loc.group(1).strip() if loc else ""
+            # A lid added at the cover site of a plate (Location GetCoverSiteName("plate")) stands on that plate,
+            # as after an RGA transfer onto it (Destination.onto)
+            under = re.fullmatch(r'GetCoverSiteName\("(.+)"\)', location)
             return label.group(1).strip(), Item(
                 ltype.group(1).strip() if ltype else "",
-                loc.group(1).strip() if loc else "",
+                location,
                 int(pos.group(1)) if pos else 0,
+                under.group(1) if under else "",
             )
     if "RemoveLabwareDataV1" in xml:
         m = re.search(r"<LabwareName>([^<]*)</LabwareName>", _unescape(xml))
