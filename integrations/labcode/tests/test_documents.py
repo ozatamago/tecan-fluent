@@ -30,9 +30,9 @@ def test_lc_schedule_plans_the_steps_in_the_scripts_order(tmp_path):
         "S06_PlateAToCplc", "S07_LidBToHotel", "S08_LidTroughToHotel", "S09_LidTroughOn", "S10_LidRack200On",
         "S11_LidRack50On", "S12_MeasureB", "S13_LidBOn",
     ]  # fmt: skip
-    assert [n.split("/")[1] for n in order if n.startswith("S14_IncubateB/")] == [
-        "SetTemperature", "ToRegrip", "IntoIncubator", "CloseDoor", "StartShaker", "Shake", "StopShaker",
-        "BackFromIncubator", "CloseDoorAgain",
+    assert [n.split("/", 1)[1] for n in order if n.startswith("S14_IncubateB/")] == [
+        "SetTemperature", "Shake/ToRegrip", "Shake/IntoIncubator", "Shake/CloseDoor", "Shake/StartShaker",
+        "Shake/Shake", "Shake/StopShaker", "Shake/BackFromIncubator", "Shake/CloseDoorAgain",
     ]  # fmt: skip
     assert len(activities) == 27
 
@@ -50,5 +50,20 @@ def test_no_instrument_names_in_the_helper_package():
     import fluent780_labcode
 
     source = "".join(p.read_text() for p in Path(fluent780_labcode.__file__).parent.glob("*.py"))
-    for name in ("Flat_Custom", "HotelMP_Pos", "Nest7mm", "Regrip_Pos", "Incub6Shake", "OFML_Abs405", "_Lid["):
+    for name in (
+        "Flat_Custom",
+        "HotelMP_Pos",
+        "Nest7mm",
+        "Regrip_Pos",
+        "Incub6Shake",
+        "OFML_Abs405",
+        "_Lid[",
+        "Sarstedt",
+        "Trough[",
+        "ul SBS",
+        "Water Free",
+        "Water Mix",
+        "BioShake_Q1",
+        "CPLC_Flat",
+    ):
         assert name not in source

@@ -105,13 +105,45 @@ class Step:
         )
         return responses
 
-    def hold(self, seconds: float) -> None:
-        """Wait `seconds` inside the run (e.g. while a shaker runs), checking the run before and after."""
+    def hold(self, seconds: float, scale: float = 1.0) -> None:
+        """Wait ``seconds * scale`` inside the run, checking the run before and after. `seconds` is the protocol's
+        time; `scale` (e.g. 0.1 for a flow check) comes from the workflow or the run boundary."""
+        actual = float(seconds) * float(scale)
         self.check_run()
-        self.mission.event("hold", seconds=seconds)
-        self._sleep(float(seconds))
+        self.mission.event("hold", seconds=actual, protocol_seconds=float(seconds), scale=float(scale))
+        self._sleep(actual)
         self.check_run()
-        self.mission.event("held", seconds=seconds)
+        self.mission.event("held", seconds=actual)
+
+    def wait_temperature(
+        self, feature: str, command: str, minimum: float, interval: float, timeout: float, *args: Any
+    ) -> float:
+        """Read a temperature (``<feature>.<command>(*args)``) every `interval` seconds until it is at least
+        `minimum`, and return it. Fails after `timeout` seconds; the instrument keeps its setpoint."""
+        t0 = time.monotonic()
+        while True:
+            value = temperature_of(self.call(feature, command, *args, label=f"{feature}.{command}", timeout=180))
+            self.mission.event("temperature", feature=feature, value=value, minimum=minimum)
+            if value >= minimum:
+                return value
+            if time.monotonic() - t0 > timeout:
+                raise MissionError(f"{feature}: {value} C after {timeout:.0f} s, below {minimum} C")
+            self._sleep(float(interval))
+
+    def measure(self, plate: str, method: str, *, allow_missing_result: bool = False, timeout: float = 900) -> dict:
+        """``PlateHandling.MeasureWorktablePlate`` and the ``Absorbance`` value. With `allow_missing_result`, a
+        measurement the server reports as done but whose result file it cannot find gives a reading with no values
+        and a note (2026-11-19: Abs600.mth writes its file elsewhere) instead of failing."""
+        label = f"Measure {plate} in the reader ({method})"
+        try:
+            responses = self.call("PlateHandling", "MeasureWorktablePlate", plate, method, label=label, timeout=timeout)
+        except Exception as exc:
+            text = str(exc)
+            if not (allow_missing_result and "Result file" in text and "not found" in text):
+                raise
+            self.mission.event("note", label=label, note=text)
+            return {"method": method, "result_file": "", "labels": [], "wells": [], "values": [], "note": text}
+        return absorbance_reading(responses)
 
     # -- cover sites ----------------------------------------------------------------------------------------------
 
@@ -143,4 +175,18 @@ def absorbance_reading(responses: Any) -> dict:
         "labels": [str(v.get("Label", "")) for v in values],
         "wells": [str(v.get("Well", "")) for v in values],
         "values": [float(v["Value"]) for v in values],
+        "note": "",
     }
+
+
+def temperature_of(responses: Any) -> float:
+    """The temperature in a ReadTemperature response (``Reading.TemperatureC``; a test server may send JSON)."""
+    reading = serializable(getattr(responses, "Reading", responses))
+    if isinstance(reading, dict) and "Reading" in reading and len(reading) == 1:
+        reading = reading["Reading"]
+    if isinstance(reading, str):
+        reading = json.loads(reading)
+    try:
+        return float(reading["TemperatureC"])
+    except (KeyError, TypeError, ValueError):
+        raise MissionError(f"no temperature in {reading!r}") from None

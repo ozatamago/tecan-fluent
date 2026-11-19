@@ -6,10 +6,10 @@
 #   add lids (5) -> lid moves (steps 1-11, plate A to the BioShake and back) -> measure plate B in the Infinite
 #   (12) -> B's lid back (13) -> B through Incubator1 with shaking and back to where it was (14-22)
 #
-# HOW each step is carried out (which SiLA2 command of the Tecan Fluent connector) is in
-# colour_water_layout.env.yaml; WHICH labware is on the deck (FluentControl labels and lid types) comes in at the run
-# boundary (colour_water_layout.boundary.yaml). The sites, the method file and the incubation settings of this test
-# are literals below.
+# The types and processes are shared with the other Fluent 780 workflows (lib/, imported). HOW each step is carried
+# out (which SiLA2 command of the Tecan Fluent connector) is in fluent780.env.yaml; WHICH labware is on the deck
+# (FluentControl labels and lid types) comes in at the run boundary (colour_water_layout.boundary.yaml). The sites,
+# the method file and the incubation settings of this test are literals below.
 #
 # Order. Every step takes the Workcell Object and hands it on (objects.map), so the steps form one chain and run one
 # after the other in exactly this order; the Workcell is the FluentControl run that the run manager opened (its view
@@ -18,222 +18,10 @@
 spec_version: "0.0"
 
 types:
-  # The Fluent 780 work cell inside one FluentControl run. It enters and leaves at the run boundary; the run manager
-  # opens the run before labcode starts and ends it afterwards.
-  Workcell:
-    domain: object
-    view:
-      mission_dir: { type: String }
-
-  # One absorbance measurement (MeasureWorktablePlate): one entry per reported value.
-  Absorbance:
-    domain: data
-    view:
-      method: { type: String }
-      result_file: { type: String }
-      labels: { type: Array<String> }
-      wells: { type: Array<String> }
-      values: { type: Array<Float> }
+  $import: lib/fluent780_types.yaml
 
 processes:
-  # -- lids ----------------------------------------------------------------------------------------------------------
-
-  # Tell FluentControl that a lid lies on its holder (plate, trough or tip rack). Nothing moves.
-  add_lid:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      lid: { type: String, phase: data }
-      lid_type: { type: String, phase: data }
-      holder: { type: String, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # Take a lid off and put it down at a site (the RGA).
-  remove_lid:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      lid: { type: String, phase: data }
-      location: { type: String, phase: data }
-      site: { type: Int, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # Put a lid onto its holder's cover site (the RGA).
-  put_lid_on:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      lid: { type: String, phase: data }
-      holder: { type: String, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # Move a plate within this run (the RGA; FluentControl's own record of the plate).
-  move_plate:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      plate: { type: String, phase: data }
-      location: { type: String, phase: data }
-      site: { type: Int, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # Move a plate whose position the connector tracks across runs (the RGA; e.g. into an incubator and back).
-  transfer_plate:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      plate: { type: String, phase: data }
-      location: { type: String, phase: data }
-      site: { type: Int, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # -- reader --------------------------------------------------------------------------------------------------------
-
-  # Measure a plate (without lid) in the reader: it is carried in, measured and put back where it was.
-  measure_absorbance:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      plate: { type: String, phase: data }
-      method: { type: String, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-      reading: { type: Absorbance, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # -- incubator -----------------------------------------------------------------------------------------------------
-
-  set_incubator_temperature:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      temperature: { type: Float, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  close_incubator_door:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  start_incubator_shaker:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      frequency: { type: Float, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  stop_incubator_shaker:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # Wait inside the run.
-  hold:
-    kind: atomic
-    inputs:
-      cell: { type: Workcell, phase: data }
-      seconds: { type: Float, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    objects:
-      map: { outputs.cell: inputs.cell }
-
-  # Set the incubator temperature, carry the plate in (by way of a regrip site), close the door, shake for a while,
-  # and bring the plate back.
-  incubate_with_shaking:
-    kind: composite
-    inputs:
-      cell: { type: Workcell, phase: data }
-      plate: { type: String, phase: data }
-      temperature: { type: Float, phase: data }
-      frequency: { type: Float, phase: data }
-      seconds: { type: Float, phase: data }
-      via_location: { type: String, phase: data }
-      via_site: { type: Int, phase: data }
-      incubator_location: { type: String, phase: data }
-      incubator_site: { type: Int, phase: data }
-      return_location: { type: String, phase: data }
-      return_site: { type: Int, phase: data }
-    outputs:
-      cell: { type: Workcell, phase: data }
-    body:
-      nodes:
-        - id: SetTemperature
-          process: set_incubator_temperature
-          state: { cell: { from: inputs.cell } }
-          bind: { temperature: { from: inputs.temperature } }
-        - id: ToRegrip
-          process: transfer_plate
-          state: { cell: { from: SetTemperature.cell } }
-          bind:
-            plate: { from: inputs.plate }
-            location: { from: inputs.via_location }
-            site: { from: inputs.via_site }
-        - id: IntoIncubator
-          process: transfer_plate
-          state: { cell: { from: ToRegrip.cell } }
-          bind:
-            plate: { from: inputs.plate }
-            location: { from: inputs.incubator_location }
-            site: { from: inputs.incubator_site }
-        - id: CloseDoor
-          process: close_incubator_door
-          state: { cell: { from: IntoIncubator.cell } }
-        - id: StartShaker
-          process: start_incubator_shaker
-          state: { cell: { from: CloseDoor.cell } }
-          bind: { frequency: { from: inputs.frequency } }
-        - id: Shake
-          process: hold
-          state: { cell: { from: StartShaker.cell } }
-          bind: { seconds: { from: inputs.seconds } }
-        - id: StopShaker
-          process: stop_incubator_shaker
-          state: { cell: { from: Shake.cell } }
-        - id: BackFromIncubator
-          process: transfer_plate
-          state: { cell: { from: StopShaker.cell } }
-          bind:
-            plate: { from: inputs.plate }
-            location: { from: inputs.return_location }
-            site: { from: inputs.return_site }
-        - id: CloseDoorAgain
-          process: close_incubator_door
-          state: { cell: { from: BackFromIncubator.cell } }
-      returns:
-        cell: { from: CloseDoorAgain.cell }
-
-  # -- the test ------------------------------------------------------------------------------------------------------
+  $import: lib/fluent780_processes.yaml
 
   main:
     kind: composite
@@ -341,7 +129,7 @@ processes:
         - id: S12_MeasureB
           process: measure_absorbance
           state: { cell: { from: S11_LidRack50On.cell } }
-          bind: { plate: { from: inputs.plate_b }, method: { value: OFML_Abs405.mth } }
+          bind: { plate: { from: inputs.plate_b }, method: { value: OFML_Abs405.mth }, allow_missing_result: { value: false } }
         # step 13
         - id: S13_LidBOn
           process: put_lid_on

@@ -1,0 +1,47 @@
+# Run boundary for colour_water_w01_w21.workflow.yaml: what is on the deck for this run (2026-11-19 17:21 layout)
+# and how long the protocol waits are.
+#
+#   plate B  96 Well Flat_Custom[001]  Nest7mm_Pos[1], lidded     trough  4 Well SBS Trough[001]  Nest7mm_Pos[2]
+#   plate A  96 Well Flat_Custom[002]  CPLC_Flat_Pos[3], lidded   tubes   POGO on CPLC slot 1 (1.5ml Sarstedt)
+#   tips     50 ul Nest61mm_Pos_1[7], 200 ul [4], 1000 ul [6] (its lid taken off by hand)
+#
+# Tubes: M [001], C [002], DNA1 [003], DNA2 [004], CaCl2 [005], IPTG [006], SOC [008].
+# The Workcell's mission_dir is filled in by the run manager; "." is only a placeholder.
+boundary:
+  inputs:
+    cell: { spot: fluent_control.deck, view: { mission_dir: "." } }
+    # 1 = the protocol's waits. 0.1 was used on 2026-11-19 (a flow check, not the protocol times). The 10 s shake in
+    # the incubator is not scaled.
+    wait_scale: { view: 0.1 }
+    plate_a: { view: "96 Well Flat_Custom[002]" }
+    plate_b: { view: "96 Well Flat_Custom[001]" }
+    trough: { view: "4 Well SBS Trough[001]" }
+    tube_m: { view: "1.5ml Sarstedt[001]" }
+    tube_c: { view: "1.5ml Sarstedt[002]" }
+    tube_dna1: { view: "1.5ml Sarstedt[003]" }
+    tube_dna2: { view: "1.5ml Sarstedt[004]" }
+    tube_cacl2: { view: "1.5ml Sarstedt[005]" }
+    tube_iptg: { view: "1.5ml Sarstedt[006]" }
+    tube_soc: { view: "1.5ml Sarstedt[008]" }
+    rack50: { view: "FCA_ 50ul SBS[001]" }
+    rack200: { view: "FCA_ 200ul SBS[003]" }
+    # set_next_tip: "Set Available Tips" with the rack's next tip before every single-channel GetTips (the 50 ul and
+    # 1000 ul racks on 2026-11-19; the 200 ul rack was taken from as FluentControl counts it)
+    tips_50: { view: { tip_type: "FCA, 50ul SBS", rack: "FCA_ 50ul SBS[001]", set_next_tip: true } }
+    tips_200: { view: { tip_type: "FCA, 200ul SBS", rack: "FCA_ 200ul SBS[003]", set_next_tip: false } }
+    tips_1000: { view: { tip_type: "FCA, 1000ul SBS", rack: "FCA_ 1000ul SBS[002]", set_next_tip: true } }
+    lid_a: { view: "PlateA_Lid[001]" }
+    lid_a_type: { view: Lid_9mm_Custom }
+    lid_b: { view: "PlateB_Lid[001]" }
+    lid_b_type: { view: Lid_9mm_Custom }
+    lid_trough: { view: "TroughLid[001]" }
+    lid_trough_type: { view: Lid_9mm }
+    lid_rack50: { view: "Rack50_Lid[001]" }
+    lid_rack50_type: { view: Lid_DiTiFCA }
+    lid_rack200: { view: "Rack200_Lid[001]" }
+    lid_rack200_type: { view: Lid_DiTiFCA }
+  outputs:
+    cell: { spot: fluent_control.deck }
+    shaker_temperature_w07: {}
+    reading_405: {}
+    reading_600: {}

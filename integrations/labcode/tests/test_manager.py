@@ -9,10 +9,9 @@ from __future__ import annotations
 import pytest
 from fluent780_labcode import mission as m
 from fluent780_labcode import steps as steps_module
-from fluent780_labcode.manager import RunManager
 
 from conftest import ADD_LIDS, BOUNDARY, END, ENV, HOLD, SILA_CALLS, START, STEPS, WORKFLOW, steps_from_events
-from fakes import FakeClient, FakeInstrument, run_in_process
+from fakes import FakeInstrument, run_mission
 
 
 @pytest.fixture(autouse=True)
@@ -23,23 +22,7 @@ def no_real_waits(monkeypatch):
 
 
 def run(tmp_path, config, instrument, **kw):
-    clients = []
-
-    def connect(host, port, insecure=False):
-        assert (host, port) == ("10.5.1.156", 50060)  # the environment's address; nothing is reached
-        clients.append(FakeClient(instrument))
-        return clients[-1]
-
-    def labcode(mission, cfg):
-        return run_in_process(mission.directory, connect("10.5.1.156", 50060))
-
-    def settle(instance, label, timeout):
-        return instance.get_responses()
-
-    manager = RunManager({**config, **kw}, connect=connect, settle=settle, run_labcode=labcode)
-    mission = manager.prepare(WORKFLOW, ENV, BOUNDARY, tmp_path / "mission", None)
-    code = manager.run(mission)
-    return code, mission, clients
+    return run_mission(tmp_path / "mission", {**config, **kw}, instrument, WORKFLOW, ENV, BOUNDARY)
 
 
 def test_all_22_steps_in_order_inside_one_run(tmp_path, config, no_real_waits):

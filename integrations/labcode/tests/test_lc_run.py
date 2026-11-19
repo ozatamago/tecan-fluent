@@ -54,3 +54,31 @@ def test_lc_run_failure_ends_the_run(tmp_path, config):
     assert code == 1
     assert instrument.sila_calls() == [START, *ADD_LIDS, *sent, END]
     assert mission.state()["state"] == m.RUN_ENDED and not instrument.run_open
+
+
+def test_lc_run_w01_w21_sends_the_commands_of_the_real_run(tmp_path, config):
+    from test_colour_water import BOUNDARY as CW_BOUNDARY
+    from test_colour_water import EXPECTED as CW_EXPECTED
+    from test_colour_water import WORKFLOW as CW_WORKFLOW
+    from test_colour_water import instrument
+
+    boundary = yaml.safe_load(CW_BOUNDARY.read_text())
+    boundary["boundary"]["inputs"]["wait_scale"]["view"] = 0.001  # 600 s -> 0.6 s
+    path = tmp_path / "boundary.yaml"
+    path.write_text(yaml.safe_dump(boundary))
+    inst = instrument()
+    server = FakeServer(inst)
+    port = server.start()
+    try:
+        manager = RunManager(config)
+        mission = manager.prepare(CW_WORKFLOW, ENV, path, tmp_path / "mission", ("127.0.0.1", port))
+        code = manager.run(mission)
+    finally:
+        server.stop()
+
+    assert code == 0, (mission.directory / "lc_run.log").read_text()
+    assert inst.sila_calls() == CW_EXPECTED
+    result = yaml.safe_load((mission.directory / "result_boundary.yaml").read_text())["boundary"]["outputs"]
+    assert result["reading_405"]["view"]["wells"] == ["A1", "A2"]
+    assert result["reading_600"]["view"]["values"] == [] and "not found" in result["reading_600"]["view"]["note"]
+    assert result["shaker_temperature_w07"]["view"] == pytest.approx(42.011)

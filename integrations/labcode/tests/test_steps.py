@@ -76,5 +76,5 @@ def test_absorbance_reading_from_the_connectors_structure():
     )
     assert absorbance_reading(responses) == {
         "method": "OFML_Abs405.mth", "result_file": r"C:\x.asc",
-        "labels": ["Label1"], "wells": ["A1"], "values": [0.0524],
+        "labels": ["Label1"], "wells": ["A1"], "values": [0.0524], "note": "",
     }  # fmt: skip

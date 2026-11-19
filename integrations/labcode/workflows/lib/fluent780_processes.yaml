@@ -1,0 +1,328 @@
+# Processes shared by the Fluent 780 workflows (imported into `processes:` with `$import: lib/fluent780_processes.yaml`).
+#
+# Every process takes the Workcell (the FluentControl run) and hands it on (objects.map). Labware, wells and tip racks
+# are Pure Data: FluentControl labels and well names. HOW each process is carried out is in ../fluent780.env.yaml.
+
+# -- lids and plates (RGA) --------------------------------------------------------------------------------------------
+
+# Tell FluentControl that a lid lies on its holder (plate, trough or tip rack). Nothing moves.
+add_lid:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    lid: { type: String, phase: data }
+    lid_type: { type: String, phase: data }
+    holder: { type: String, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Take a lid off and put it down at a site.
+remove_lid:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    lid: { type: String, phase: data }
+    location: { type: String, phase: data }
+    site: { type: Int, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Put a lid onto its holder's cover site.
+put_lid_on:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    lid: { type: String, phase: data }
+    holder: { type: String, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Move a plate within this run (FluentControl's own record of the plate).
+move_plate:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    plate: { type: String, phase: data }
+    location: { type: String, phase: data }
+    site: { type: Int, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Move a plate whose position the connector tracks across runs (e.g. into an incubator and back).
+transfer_plate:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    plate: { type: String, phase: data }
+    location: { type: String, phase: data }
+    site: { type: Int, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# -- pipetting (FCA) --------------------------------------------------------------------------------------------------
+# One process is one transfer: GetTips ... DropTips, so that labcode connects once for it.
+
+# One channel, a new tip for every target well: aspirate `volume` from the source well, dispense it into the target
+# well, mix there with the same tip when mix_cycles > 0, drop the tip.
+transfer_liquid:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    tips: { type: TipRack, phase: data }
+    source: { type: String, phase: data }
+    source_well: { type: String, phase: data }
+    volume: { type: Float, phase: data }
+    target: { type: String, phase: data }
+    target_wells: { type: Array<String>, phase: data }
+    liquid_class: { type: String, phase: data }
+    mix_volume: { type: Float, phase: data }
+    mix_cycles: { type: Int, phase: data }
+    mix_liquid_class: { type: String, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Several channels at once, one target plate column at a time: neighbouring channels 1..k take new tips from the
+# rack (k = the column's wells, at most the tips left in the rack's current column; the rest in the next round), each
+# tip aspirates `volume` from the same source well (e.g. a trough lane), the tips dispense into the column's wells,
+# optionally mix there with the same tips, and are dropped together.
+transfer_liquid_multi:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    tips: { type: TipRack, phase: data }
+    source: { type: String, phase: data }
+    source_well: { type: String, phase: data }
+    volume: { type: Float, phase: data }
+    target: { type: String, phase: data }
+    target_wells: { type: Array<String>, phase: data }
+    liquid_class: { type: String, phase: data }
+    mix_volume: { type: Float, phase: data }
+    mix_cycles: { type: Int, phase: data }
+    mix_liquid_class: { type: String, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# New tips only for mixing, several channels at once as in transfer_liquid_multi.
+mix_wells_multi:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    tips: { type: TipRack, phase: data }
+    target: { type: String, phase: data }
+    target_wells: { type: Array<String>, phase: data }
+    mix_volume: { type: Float, phase: data }
+    mix_cycles: { type: Int, phase: data }
+    mix_liquid_class: { type: String, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# -- temperature ------------------------------------------------------------------------------------------------------
+
+# A cooling/heating position (CPLC slot) to a target temperature. Returns once sent; its temperature is not read.
+set_plate_temperature:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    slot: { type: Int, phase: data }
+    temperature: { type: Float, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+set_shaker_temperature:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    temperature: { type: Float, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Read the shaker's temperature every `interval` seconds until it is at least `minimum`; fail after `timeout` seconds.
+wait_shaker_temperature:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    minimum: { type: Float, phase: data }
+    interval: { type: Float, phase: data }
+    timeout: { type: Float, phase: data }
+  outputs:
+    cell: { type: Workcell, phase: data }
+    temperature: { type: Float, phase: data }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+shaker_temperature_off:
+  kind: atomic
+  inputs: { cell: { type: Workcell, phase: data } }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+lock_shaker_plate:
+  kind: atomic
+  inputs: { cell: { type: Workcell, phase: data } }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+unlock_shaker_plate:
+  kind: atomic
+  inputs: { cell: { type: Workcell, phase: data } }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+set_incubator_temperature:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    temperature: { type: Float, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+close_incubator_door:
+  kind: atomic
+  inputs: { cell: { type: Workcell, phase: data } }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+start_incubator_shaker:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    frequency: { type: Float, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+stop_incubator_shaker:
+  kind: atomic
+  inputs: { cell: { type: Workcell, phase: data } }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# -- reader, camera, time ---------------------------------------------------------------------------------------------
+
+# Measure a plate (without lid) in the reader: carried in, measured and put back where it was. With
+# allow_missing_result, a measurement whose result file the server cannot find is recorded as a note (no values)
+# instead of failing the run.
+measure_absorbance:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    plate: { type: String, phase: data }
+    method: { type: String, phase: data }
+    allow_missing_result: { type: Bool, phase: data }
+  outputs:
+    cell: { type: Workcell, phase: data }
+    reading: { type: Absorbance, phase: data }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# One deck camera image (saved on the Fluent PC). A failed image is recorded and does not stop the run.
+take_photo:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    camera: { type: String, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# Wait seconds x scale inside the run (scale < 1 shortens protocol waits for a flow check).
+hold:
+  kind: atomic
+  inputs:
+    cell: { type: Workcell, phase: data }
+    seconds: { type: Float, phase: data }
+    scale: { type: Float, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  objects: { map: { outputs.cell: inputs.cell } }
+
+# -- composites -------------------------------------------------------------------------------------------------------
+
+# Carry the plate into the incubator (by way of a regrip site), close the door, shake for `seconds` (not scaled), and
+# bring the plate back.
+shake_in_incubator:
+  kind: composite
+  inputs:
+    cell: { type: Workcell, phase: data }
+    plate: { type: String, phase: data }
+    frequency: { type: Float, phase: data }
+    seconds: { type: Float, phase: data }
+    via_location: { type: String, phase: data }
+    via_site: { type: Int, phase: data }
+    incubator_location: { type: String, phase: data }
+    incubator_site: { type: Int, phase: data }
+    return_location: { type: String, phase: data }
+    return_site: { type: Int, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  body:
+    nodes:
+      - id: ToRegrip
+        process: transfer_plate
+        state: { cell: { from: inputs.cell } }
+        bind: { plate: { from: inputs.plate }, location: { from: inputs.via_location }, site: { from: inputs.via_site } }
+      - id: IntoIncubator
+        process: transfer_plate
+        state: { cell: { from: ToRegrip.cell } }
+        bind:
+          plate: { from: inputs.plate }
+          location: { from: inputs.incubator_location }
+          site: { from: inputs.incubator_site }
+      - id: CloseDoor
+        process: close_incubator_door
+        state: { cell: { from: IntoIncubator.cell } }
+      - id: StartShaker
+        process: start_incubator_shaker
+        state: { cell: { from: CloseDoor.cell } }
+        bind: { frequency: { from: inputs.frequency } }
+      - id: Shake
+        process: hold
+        state: { cell: { from: StartShaker.cell } }
+        bind: { seconds: { from: inputs.seconds }, scale: { value: 1.0 } }
+      - id: StopShaker
+        process: stop_incubator_shaker
+        state: { cell: { from: Shake.cell } }
+      - id: BackFromIncubator
+        process: transfer_plate
+        state: { cell: { from: StopShaker.cell } }
+        bind:
+          plate: { from: inputs.plate }
+          location: { from: inputs.return_location }
+          site: { from: inputs.return_site }
+      - id: CloseDoorAgain
+        process: close_incubator_door
+        state: { cell: { from: BackFromIncubator.cell } }
+    returns:
+      cell: { from: CloseDoorAgain.cell }
+
+# Set the incubator temperature, then shake_in_incubator.
+incubate_with_shaking:
+  kind: composite
+  inputs:
+    cell: { type: Workcell, phase: data }
+    plate: { type: String, phase: data }
+    temperature: { type: Float, phase: data }
+    frequency: { type: Float, phase: data }
+    seconds: { type: Float, phase: data }
+    via_location: { type: String, phase: data }
+    via_site: { type: Int, phase: data }
+    incubator_location: { type: String, phase: data }
+    incubator_site: { type: Int, phase: data }
+    return_location: { type: String, phase: data }
+    return_site: { type: Int, phase: data }
+  outputs: { cell: { type: Workcell, phase: data } }
+  body:
+    nodes:
+      - id: SetTemperature
+        process: set_incubator_temperature
+        state: { cell: { from: inputs.cell } }
+        bind: { temperature: { from: inputs.temperature } }
+      - id: Shake
+        process: shake_in_incubator
+        state: { cell: { from: SetTemperature.cell } }
+        bind:
+          plate: { from: inputs.plate }
+          frequency: { from: inputs.frequency }
+          seconds: { from: inputs.seconds }
+          via_location: { from: inputs.via_location }
+          via_site: { from: inputs.via_site }
+          incubator_location: { from: inputs.incubator_location }
+          incubator_site: { from: inputs.incubator_site }
+          return_location: { from: inputs.return_location }
+          return_site: { from: inputs.return_site }
+    returns:
+      cell: { from: Shake.cell }

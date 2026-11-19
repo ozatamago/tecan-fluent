@@ -79,18 +79,19 @@ def with_endpoint(environment: dict, host: str, port: int) -> dict:
     return env
 
 
-def check_documents(workflow_path: Path, environment: dict) -> None:
-    """The front doors ``lc run`` uses (portable v0 and the labcode extension), run before StartRun."""
+def check_documents(workflow_path: Path, environment: dict) -> dict:
+    """The front doors ``lc run`` uses (portable v0 and the labcode extension), run before StartRun. Returns the
+    workflow with its ``$import``s expanded (what the mission runs)."""
     from labcode.dialect import validate_dialect
     from ofplang.run import front_door_check
-    from ofplang.run.runner import load_document
 
     result = front_door_check(str(workflow_path), validate=True)
     if not result.ok:
         raise MissionError(f"the workflow is not valid: {result.diagnostics} {result.unsupported}")
-    dialect = validate_dialect(load_document(str(workflow_path)), environment)
+    dialect = validate_dialect(result.document, environment)
     if not dialect.ok:
         raise MissionError(f"the labcode environment is not valid: {dialect.errors}")
+    return result.document
 
 
 def lc_run_command(mission: Mission, config: dict) -> list[str]:
@@ -178,11 +179,12 @@ class RunManager:
         if endpoint is not None:
             env = with_endpoint(env, *endpoint)
         conn = connection_of(env)
-        check_documents(workflow, env)
+        expanded = check_documents(workflow, env)
         bnd = load_yaml(boundary)
         cell = bnd["boundary"]["inputs"]["cell"]
         cell["view"] = {**(cell.get("view") or {}), "mission_dir": str(mission.directory)}
-        (directory / "workflow.yaml").write_text(workflow.read_text(encoding="utf-8"), encoding="utf-8")
+        # the expanded workflow, so the mission holds exactly what was checked and run
+        (directory / "workflow.yaml").write_text(yaml.safe_dump(expanded, sort_keys=False), encoding="utf-8")
         (directory / "environment.yaml").write_text(yaml.safe_dump(env, sort_keys=False), encoding="utf-8")
         (directory / "boundary.yaml").write_text(yaml.safe_dump(bnd, sort_keys=False, allow_unicode=True), "utf-8")
         mission.write(

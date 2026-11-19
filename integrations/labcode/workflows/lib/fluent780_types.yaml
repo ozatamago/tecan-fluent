@@ -1,0 +1,30 @@
+# Types shared by the Fluent 780 workflows (imported with `types: {$import: lib/fluent780_types.yaml}`).
+
+# The Fluent 780 work cell inside one FluentControl run. It enters and leaves at the run boundary; the run manager
+# opens the run before labcode starts and ends it afterwards. Every step takes it and hands it on, so the steps run
+# one after the other in the order of the chain.
+Workcell:
+  domain: object
+  view:
+    mission_dir: { type: String }
+
+# A tip rack to take tips from: the FluentControl tip type and rack label, and whether "Set Available Tips"
+# (LiquidHandling.SetNextTipPosition) is sent with the rack's next tip before a single-channel GetTips.
+TipRack:
+  domain: data
+  view:
+    tip_type: { type: String }
+    rack: { type: String }
+    set_next_tip: { type: Bool }
+
+# One absorbance measurement (MeasureWorktablePlate): one entry per reported value. `note` says why a measurement
+# has no values (e.g. its result file was not found), and is empty otherwise.
+Absorbance:
+  domain: data
+  view:
+    method: { type: String }
+    result_file: { type: String }
+    labels: { type: Array<String> }
+    wells: { type: Array<String> }
+    values: { type: Array<Float> }
+    note: { type: String }

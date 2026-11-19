@@ -1,0 +1,595 @@
+# Fluent 780 colour-water run-through W01-W21 as a portable ofplang v0 workflow: WHAT happens, in which order.
+#
+# The same steps and server commands as the serial script colorwater_20261119.py, which passed on the real
+# instrument on 2026-11-19 17:21-17:57 (protocol "20261114_Fluent_colour-water" v1.2, with the changes agreed on
+# 2026-11-19): temperatures, lids, the transformation-like steps on plate A (W02-W13), the plate B layout with
+# several channels at once (W14-W16), a photo (W17), lids back (W18), Incubator1 (W19-W21), the reader (Abs405 and
+# Abs600) and the end (rack lids back, BioShake off).
+#
+# Shared types and processes: lib/ (imported). HOW each process is carried out: fluent780.env.yaml. WHICH labware,
+# tip racks and lids are on the deck, and the wait scale: the run boundary (colour_water_w01_w21.boundary.yaml).
+# The protocol itself is written here: wells, volumes, liquid classes, sites, temperatures and protocol waits.
+#
+# Wells (2026-11-19, shifted to unused wells): plate A T1 = B6, T2 = B8, I1 = D6, I2 = D8; plate B L1 = B1 D1 F1,
+# L2 = B5 D5 F5, L3 = B7 D7 F7, L4 = B9 D9 F9, N (water only) = C1 E1 C5 E5 C7 E7 C9 E9 B10 D10 F10 H11.
+#
+# Differences from the protocol (2026-11-19): W10 sends the 37 C command only (the 60 min recovery is done in the LB
+# overnight run, so there is no wait for 37 C and no 60 min hold); SOC stays in the cooled POGO; the reader reads
+# OFML_Abs405.mth and Abs600.mth (Abs600 writes its result file where the server does not look yet, so a missing
+# result file is a note for that measurement and not a failure).
+spec_version: "0.0"
+
+types:
+  $import: lib/fluent780_types.yaml
+
+processes:
+  $import: lib/fluent780_processes.yaml
+
+  main:
+    kind: composite
+    inputs:
+      cell: { type: Workcell, phase: data }
+      wait_scale: { type: Float, phase: data }   # multiplies every protocol wait (1 = protocol times)
+      # FluentControl labels
+      plate_a: { type: String, phase: data }
+      plate_b: { type: String, phase: data }
+      trough: { type: String, phase: data }
+      tube_m: { type: String, phase: data }
+      tube_c: { type: String, phase: data }
+      tube_dna1: { type: String, phase: data }
+      tube_dna2: { type: String, phase: data }
+      tube_cacl2: { type: String, phase: data }
+      tube_iptg: { type: String, phase: data }
+      tube_soc: { type: String, phase: data }
+      rack50: { type: String, phase: data }
+      rack200: { type: String, phase: data }
+      tips_50: { type: TipRack, phase: data }
+      tips_200: { type: TipRack, phase: data }
+      tips_1000: { type: TipRack, phase: data }
+      lid_a: { type: String, phase: data }
+      lid_a_type: { type: String, phase: data }
+      lid_b: { type: String, phase: data }
+      lid_b_type: { type: String, phase: data }
+      lid_trough: { type: String, phase: data }
+      lid_trough_type: { type: String, phase: data }
+      lid_rack50: { type: String, phase: data }
+      lid_rack50_type: { type: String, phase: data }
+      lid_rack200: { type: String, phase: data }
+      lid_rack200_type: { type: String, phase: data }
+    outputs:
+      cell: { type: Workcell, phase: data }
+      shaker_temperature_w07: { type: Float, phase: data }
+      reading_405: { type: Absorbance, phase: data }
+      reading_600: { type: Absorbance, phase: data }
+    body:
+      nodes:
+        # ---- W01: temperatures (CPLC slots 1 = POGO and 3 = plate A to 4 C, BioShake 42 C, Incubator1 37 C),
+        # the fixed CPLC cooling wait (its temperature cannot be read), lids registered, rack lids and A's lid parked
+        - id: W01_PogoTo4C
+          process: set_plate_temperature
+          state: { cell: { from: inputs.cell } }
+          bind: { slot: { value: 1 }, temperature: { value: 4.0 } }
+        - id: W01_PlateATo4C
+          process: set_plate_temperature
+          state: { cell: { from: W01_PogoTo4C.cell } }
+          bind: { slot: { value: 3 }, temperature: { value: 4.0 } }
+        - id: W01_ShakerTo42C
+          process: set_shaker_temperature
+          state: { cell: { from: W01_PlateATo4C.cell } }
+          bind: { temperature: { value: 42.0 } }
+        - id: W01_IncubatorTo37C
+          process: set_incubator_temperature
+          state: { cell: { from: W01_ShakerTo42C.cell } }
+          bind: { temperature: { value: 37.0 } }
+        - id: W01_Precool
+          process: hold
+          state: { cell: { from: W01_IncubatorTo37C.cell } }
+          bind: { seconds: { value: 600.0 }, scale: { from: inputs.wait_scale } }
+        - id: W01_AddLidA
+          process: add_lid
+          state: { cell: { from: W01_Precool.cell } }
+          bind: { lid: { from: inputs.lid_a }, lid_type: { from: inputs.lid_a_type }, holder: { from: inputs.plate_a } }
+        - id: W01_AddLidB
+          process: add_lid
+          state: { cell: { from: W01_AddLidA.cell } }
+          bind: { lid: { from: inputs.lid_b }, lid_type: { from: inputs.lid_b_type }, holder: { from: inputs.plate_b } }
+        - id: W01_AddLidTrough
+          process: add_lid
+          state: { cell: { from: W01_AddLidB.cell } }
+          bind:
+            lid: { from: inputs.lid_trough }
+            lid_type: { from: inputs.lid_trough_type }
+            holder: { from: inputs.trough }
+        - id: W01_AddLidRack50
+          process: add_lid
+          state: { cell: { from: W01_AddLidTrough.cell } }
+          bind:
+            lid: { from: inputs.lid_rack50 }
+            lid_type: { from: inputs.lid_rack50_type }
+            holder: { from: inputs.rack50 }
+        - id: W01_AddLidRack200
+          process: add_lid
+          state: { cell: { from: W01_AddLidRack50.cell } }
+          bind:
+            lid: { from: inputs.lid_rack200 }
+            lid_type: { from: inputs.lid_rack200_type }
+            holder: { from: inputs.rack200 }
+        - id: W01_LidRack50Off
+          process: remove_lid
+          state: { cell: { from: W01_AddLidRack200.cell } }
+          bind: { lid: { from: inputs.lid_rack50 }, location: { value: Nest7mm_Pos }, site: { value: 3 } }
+        - id: W01_LidRack200Off
+          process: remove_lid
+          state: { cell: { from: W01_LidRack50Off.cell } }
+          bind: { lid: { from: inputs.lid_rack200 }, location: { value: Nest7mm_Pos }, site: { value: 7 } }
+        - id: W01_LidAOff
+          process: remove_lid
+          state: { cell: { from: W01_LidRack200Off.cell } }
+          bind: { lid: { from: inputs.lid_a }, location: { value: HotelMP_Pos }, site: { value: 2 } }
+
+        # ---- W02-W05: plate A at CPLC 3 (4 C)
+        - id: W02_Dna1ToT1
+          process: transfer_liquid
+          state: { cell: { from: W01_LidAOff.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.tube_dna1 }
+            source_well: { value: A1 }
+            volume: { value: 3.75 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [B6] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W02_Dna2ToT2
+          process: transfer_liquid
+          state: { cell: { from: W02_Dna1ToT1.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.tube_dna2 }
+            source_well: { value: A1 }
+            volume: { value: 3.75 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [B8] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W03_CaCl2ToM
+          process: transfer_liquid
+          state: { cell: { from: W02_Dna2ToT2.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            source: { from: inputs.tube_cacl2 }
+            source_well: { value: A1 }
+            volume: { value: 100.0 }
+            target: { from: inputs.tube_m }
+            target_wells: { value: [A1] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 100.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+        - id: W04_MCold
+          process: hold
+          state: { cell: { from: W03_CaCl2ToM.cell } }
+          bind: { seconds: { value: 300.0 }, scale: { from: inputs.wait_scale } }
+        - id: W05_MToT
+          process: transfer_liquid
+          state: { cell: { from: W04_MCold.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.tube_m }
+            source_well: { value: A1 }
+            volume: { value: 37.5 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [B6, B8] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 20.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+
+        # ---- W06: lid on A, 10 min at 4 C
+        - id: W06_LidAOn
+          process: put_lid_on
+          state: { cell: { from: W05_MToT.cell } }
+          bind: { lid: { from: inputs.lid_a }, holder: { from: inputs.plate_a } }
+        - id: W06_ACold
+          process: hold
+          state: { cell: { from: W06_LidAOn.cell } }
+          bind: { seconds: { value: 600.0 }, scale: { from: inputs.wait_scale } }
+
+        # ---- W07: BioShake at 42 C (read until >= 41.5 C) -> A on it, locked, 60 s
+        - id: W07_ShakerAt42C
+          process: wait_shaker_temperature
+          state: { cell: { from: W06_ACold.cell } }
+          bind: { minimum: { value: 41.5 }, interval: { value: 30.0 }, timeout: { value: 1800.0 } }
+        - id: W07_AToShaker
+          process: move_plate
+          state: { cell: { from: W07_ShakerAt42C.cell } }
+          bind: { plate: { from: inputs.plate_a }, location: { value: BioShake_Q1_Adapter_Site }, site: { value: 1 } }
+        - id: W07_Lock
+          process: lock_shaker_plate
+          state: { cell: { from: W07_AToShaker.cell } }
+        - id: W07_Heat
+          process: hold
+          state: { cell: { from: W07_Lock.cell } }
+          bind: { seconds: { value: 60.0 }, scale: { from: inputs.wait_scale } }
+
+        # ---- W08: unlock, A back to CPLC 3, BioShake to 37 C once A is out, 120 s at 4 C
+        - id: W08_Unlock
+          process: unlock_shaker_plate
+          state: { cell: { from: W07_Heat.cell } }
+        - id: W08_AToCplc
+          process: move_plate
+          state: { cell: { from: W08_Unlock.cell } }
+          bind: { plate: { from: inputs.plate_a }, location: { value: CPLC_Flat_Pos }, site: { value: 3 } }
+        - id: W08_ShakerTo37C
+          process: set_shaker_temperature
+          state: { cell: { from: W08_AToCplc.cell } }
+          bind: { temperature: { value: 37.0 } }
+        - id: W08_ACold
+          process: hold
+          state: { cell: { from: W08_ShakerTo37C.cell } }
+          bind: { seconds: { value: 120.0 }, scale: { from: inputs.wait_scale } }
+
+        # ---- W09: A's lid off, SOC 150 into T1 and T2 with mixing
+        - id: W09_LidAOff
+          process: remove_lid
+          state: { cell: { from: W08_ACold.cell } }
+          bind: { lid: { from: inputs.lid_a }, location: { value: HotelMP_Pos }, site: { value: 2 } }
+        - id: W09_SocToT
+          process: transfer_liquid
+          state: { cell: { from: W09_LidAOff.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            source: { from: inputs.tube_soc }
+            source_well: { value: A1 }
+            volume: { value: 150.0 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [B6, B8] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 100.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+
+        # ---- W10: lid on, BioShake 37 C (command only), A on it, locked; W11 while A stays there
+        - id: W10_LidAOn
+          process: put_lid_on
+          state: { cell: { from: W09_SocToT.cell } }
+          bind: { lid: { from: inputs.lid_a }, holder: { from: inputs.plate_a } }
+        - id: W10_ShakerTo37C
+          process: set_shaker_temperature
+          state: { cell: { from: W10_LidAOn.cell } }
+          bind: { temperature: { value: 37.0 } }
+        - id: W10_AToShaker
+          process: move_plate
+          state: { cell: { from: W10_ShakerTo37C.cell } }
+          bind: { plate: { from: inputs.plate_a }, location: { value: BioShake_Q1_Adapter_Site }, site: { value: 1 } }
+        - id: W10_Lock
+          process: lock_shaker_plate
+          state: { cell: { from: W10_AToShaker.cell } }
+        - id: W11_MToC
+          process: transfer_liquid
+          state: { cell: { from: W10_Lock.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            source: { from: inputs.tube_m }
+            source_well: { value: A1 }
+            volume: { value: 50.0 }
+            target: { from: inputs.tube_c }
+            target_wells: { value: [A1] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+
+        # ---- W12: unlock, A back to CPLC 3, lid off, IPTG 22.5 into I1 and I2
+        - id: W12_Unlock
+          process: unlock_shaker_plate
+          state: { cell: { from: W11_MToC.cell } }
+        - id: W12_AToCplc
+          process: move_plate
+          state: { cell: { from: W12_Unlock.cell } }
+          bind: { plate: { from: inputs.plate_a }, location: { value: CPLC_Flat_Pos }, site: { value: 3 } }
+        - id: W12_LidAOff
+          process: remove_lid
+          state: { cell: { from: W12_AToCplc.cell } }
+          bind: { lid: { from: inputs.lid_a }, location: { value: HotelMP_Pos }, site: { value: 2 } }
+        - id: W12_IptgToI
+          process: transfer_liquid
+          state: { cell: { from: W12_LidAOff.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.tube_iptg }
+            source_well: { value: A1 }
+            volume: { value: 22.5 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [D6, D8] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+
+        # ---- W13: T -> I 75 with mixing
+        - id: W13_T1ToI1
+          process: transfer_liquid
+          state: { cell: { from: W12_IptgToI.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            source: { from: inputs.plate_a }
+            source_well: { value: B6 }
+            volume: { value: 75.0 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [D6] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 50.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+        - id: W13_T2ToI2
+          process: transfer_liquid
+          state: { cell: { from: W13_T1ToI1.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            source: { from: inputs.plate_a }
+            source_well: { value: B8 }
+            volume: { value: 75.0 }
+            target: { from: inputs.plate_a }
+            target_wells: { value: [D8] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 50.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+
+        # ---- W14-W16: plate B (its lid and the trough lid parked in the hotel)
+        - id: W14_LidBOff
+          process: remove_lid
+          state: { cell: { from: W13_T2ToI2.cell } }
+          bind: { lid: { from: inputs.lid_b }, location: { value: HotelMP_Pos }, site: { value: 3 } }
+        - id: W14_LidTroughOff
+          process: remove_lid
+          state: { cell: { from: W14_LidBOff.cell } }
+          bind: { lid: { from: inputs.lid_trough }, location: { value: HotelMP_Pos }, site: { value: 4 } }
+        # W14: trough lane A1 200 into the N wells, one column at a time with several channels
+        - id: W14_TroughToN
+          process: transfer_liquid_multi
+          state: { cell: { from: W14_LidTroughOff.cell } }
+          bind:
+            tips: { from: inputs.tips_1000 }
+            source: { from: inputs.trough }
+            source_well: { value: A1 }
+            volume: { value: 200.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [C1, E1, C5, E5, C7, E7, C9, E9, B10, D10, F10, H11] }
+            liquid_class: { value: Water Free Multi }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        # W15: 196 into each L condition (one column each): L1 from lane A1, L2-L4 from lane A2
+        - id: W15_TroughToL1
+          process: transfer_liquid_multi
+          state: { cell: { from: W14_TroughToN.cell } }
+          bind:
+            tips: { from: inputs.tips_1000 }
+            source: { from: inputs.trough }
+            source_well: { value: A1 }
+            volume: { value: 196.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B1, D1, F1] }
+            liquid_class: { value: Water Free Multi }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W15_TroughToL2
+          process: transfer_liquid_multi
+          state: { cell: { from: W15_TroughToL1.cell } }
+          bind:
+            tips: { from: inputs.tips_1000 }
+            source: { from: inputs.trough }
+            source_well: { value: A2 }
+            volume: { value: 196.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B5, D5, F5] }
+            liquid_class: { value: Water Free Multi }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W15_TroughToL3
+          process: transfer_liquid_multi
+          state: { cell: { from: W15_TroughToL2.cell } }
+          bind:
+            tips: { from: inputs.tips_1000 }
+            source: { from: inputs.trough }
+            source_well: { value: A2 }
+            volume: { value: 196.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B7, D7, F7] }
+            liquid_class: { value: Water Free Multi }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W15_TroughToL4
+          process: transfer_liquid_multi
+          state: { cell: { from: W15_TroughToL3.cell } }
+          bind:
+            tips: { from: inputs.tips_1000 }
+            source: { from: inputs.trough }
+            source_well: { value: A2 }
+            volume: { value: 196.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B9, D9, F9] }
+            liquid_class: { value: Water Free Multi }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        # W16: 4 into each L well from its source (one channel, a new tip per well), then the three wells mixed at
+        # once with new 200 tips. Sources: L1 and L2 tube C, L3 plate A I1, L4 plate A I2.
+        - id: W16_CToL1
+          process: transfer_liquid
+          state: { cell: { from: W15_TroughToL4.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.tube_c }
+            source_well: { value: A1 }
+            volume: { value: 4.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B1, D1, F1] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W16_MixL1
+          process: mix_wells_multi
+          state: { cell: { from: W16_CToL1.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B1, D1, F1] }
+            mix_volume: { value: 100.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+        - id: W16_CToL2
+          process: transfer_liquid
+          state: { cell: { from: W16_MixL1.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.tube_c }
+            source_well: { value: A1 }
+            volume: { value: 4.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B5, D5, F5] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W16_MixL2
+          process: mix_wells_multi
+          state: { cell: { from: W16_CToL2.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B5, D5, F5] }
+            mix_volume: { value: 100.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+        - id: W16_I1ToL3
+          process: transfer_liquid
+          state: { cell: { from: W16_MixL2.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.plate_a }
+            source_well: { value: D6 }
+            volume: { value: 4.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B7, D7, F7] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W16_MixL3
+          process: mix_wells_multi
+          state: { cell: { from: W16_I1ToL3.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B7, D7, F7] }
+            mix_volume: { value: 100.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+        - id: W16_I2ToL4
+          process: transfer_liquid
+          state: { cell: { from: W16_MixL3.cell } }
+          bind:
+            tips: { from: inputs.tips_50 }
+            source: { from: inputs.plate_a }
+            source_well: { value: D8 }
+            volume: { value: 4.0 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B9, D9, F9] }
+            liquid_class: { value: Water Free Single }
+            mix_volume: { value: 0.0 }
+            mix_cycles: { value: 0 }
+            mix_liquid_class: { value: "" }
+        - id: W16_MixL4
+          process: mix_wells_multi
+          state: { cell: { from: W16_I2ToL4.cell } }
+          bind:
+            tips: { from: inputs.tips_200 }
+            target: { from: inputs.plate_b }
+            target_wells: { value: [B9, D9, F9] }
+            mix_volume: { value: 100.0 }
+            mix_cycles: { value: 4 }
+            mix_liquid_class: { value: Water Mix }
+
+        # ---- W17: photo of plate B (no motion)
+        - id: W17_Photo
+          process: take_photo
+          state: { cell: { from: W16_MixL4.cell } }
+          bind: { camera: { value: Right } }
+
+        # ---- W18: lids back on A, B and the trough
+        - id: W18_LidAOn
+          process: put_lid_on
+          state: { cell: { from: W17_Photo.cell } }
+          bind: { lid: { from: inputs.lid_a }, holder: { from: inputs.plate_a } }
+        - id: W18_LidBOn
+          process: put_lid_on
+          state: { cell: { from: W18_LidAOn.cell } }
+          bind: { lid: { from: inputs.lid_b }, holder: { from: inputs.plate_b } }
+        - id: W18_LidTroughOn
+          process: put_lid_on
+          state: { cell: { from: W18_LidBOn.cell } }
+          bind: { lid: { from: inputs.lid_trough }, holder: { from: inputs.trough } }
+
+        # ---- W19-W21: lidded B through Incubator1 (already at 37 C), 5 Hz for 10 s, back to Nest7mm_Pos[1]
+        - id: W19_W21_Incubator
+          process: shake_in_incubator
+          state: { cell: { from: W18_LidTroughOn.cell } }
+          bind:
+            plate: { from: inputs.plate_b }
+            frequency: { value: 5.0 }
+            seconds: { value: 10.0 }
+            via_location: { value: Regrip_Pos }
+            via_site: { value: 1 }
+            incubator_location: { value: Incub6Shake_Pos }
+            incubator_site: { value: 1 }
+            return_location: { value: Nest7mm_Pos }
+            return_site: { value: 1 }
+
+        # ---- reader: B's lid off, OFML_Abs405 then Abs600, lid back
+        - id: R_LidBOff
+          process: remove_lid
+          state: { cell: { from: W19_W21_Incubator.cell } }
+          bind: { lid: { from: inputs.lid_b }, location: { value: HotelMP_Pos }, site: { value: 3 } }
+        - id: R_Abs405
+          process: measure_absorbance
+          state: { cell: { from: R_LidBOff.cell } }
+          bind: { plate: { from: inputs.plate_b }, method: { value: OFML_Abs405.mth }, allow_missing_result: { value: false } }
+        - id: R_Abs600
+          process: measure_absorbance
+          state: { cell: { from: R_Abs405.cell } }
+          bind: { plate: { from: inputs.plate_b }, method: { value: Abs600.mth }, allow_missing_result: { value: true } }
+        - id: R_LidBOn
+          process: put_lid_on
+          state: { cell: { from: R_Abs600.cell } }
+          bind: { lid: { from: inputs.lid_b }, holder: { from: inputs.plate_b } }
+
+        # ---- end: rack lids back (200 before 50, the clearance order), BioShake off. The run manager ends the run.
+        - id: E_LidRack200On
+          process: put_lid_on
+          state: { cell: { from: R_LidBOn.cell } }
+          bind: { lid: { from: inputs.lid_rack200 }, holder: { from: inputs.rack200 } }
+        - id: E_LidRack50On
+          process: put_lid_on
+          state: { cell: { from: E_LidRack200On.cell } }
+          bind: { lid: { from: inputs.lid_rack50 }, holder: { from: inputs.rack50 } }
+        - id: E_ShakerOff
+          process: shaker_temperature_off
+          state: { cell: { from: E_LidRack50On.cell } }
+      returns:
+        cell: { from: E_ShakerOff.cell }
+        shaker_temperature_w07: { from: W07_ShakerAt42C.temperature }
+        reading_405: { from: R_Abs405.reading }
+        reading_600: { from: R_Abs600.reading }
+
+entry: main

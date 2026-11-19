@@ -49,6 +49,8 @@ def serializable(value: Any) -> Any:
         return {str(k): serializable(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [serializable(v) for v in value]
+    if isinstance(value, bytes | bytearray):
+        return f"<{len(value)} bytes>"
     if isinstance(value, float) and not math.isfinite(value):
         return None
     if isinstance(value, str | int | float | bool) or value is None:

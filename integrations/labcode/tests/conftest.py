@@ -9,9 +9,9 @@ import pytest
 HERE = Path(__file__).resolve().parent
 WORKFLOWS = HERE.parent / "workflows"
 WORKFLOW = WORKFLOWS / "colour_water_layout.workflow.yaml"
-ENV = WORKFLOWS / "colour_water_layout.env.yaml"
+ENV = WORKFLOWS / "fluent780.env.yaml"
 BOUNDARY = WORKFLOWS / "colour_water_layout.boundary.yaml"
-DOCUMENT = WORKFLOWS / "colour_water_layout.document.yaml"
+DOCUMENT = WORKFLOWS / "fluent780.document.yaml"
 
 A, B, TR = "96 Well Flat_Custom[002]", "96 Well Flat_Custom[001]", "4 Well SBS Trough[001]"
 R50, R200 = "FCA_ 50ul SBS[001]", "FCA_ 200ul SBS[003]"
