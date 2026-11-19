@@ -41,6 +41,9 @@ class InfiniteConfig(Config):
     output_dir: str = r"C:\Users\Public\Documents\Tecan\Magellan Pro\asc"
     """Magellan_Measure output directory. Results are written here as "riken_<timestamp>" and the resulting .asc
     is searched for below it."""
+    result_dirs: list = dataclasses.field(default_factory=lambda: [r"C:\FluentData"])
+    r"""Further directories searched (with their subdirectories) for the .asc when it is not below output_dir: the
+    ASCII export folder is set in each method file (Abs600.mth writes C:\FluentData\00_A600_Result\ASC, 2026-11-19)."""
     method_dir: str = r"C:\Users\Public\Documents\Tecan\Magellan Pro\mth"
     wavelength_methods: dict = dataclasses.field(default_factory=dict)
     """Method files used by ReadAbsorbance(wavelength) (e.g. {"600": "RIKEN_Abs600_noTemp.mth"}).
@@ -143,9 +146,11 @@ class FluentInfiniteReader:
 
     # ---- Result retrieval
     def _fetch_asc(self, name: str, since: float) -> tuple[str, AscResult]:
-        d = self.config.output_dir
+        dirs = [self.config.output_dir, *self.config.result_dirs]
+        d = ", ".join(dirs)
+        paths = ",".join(f"'{x}'" for x in dirs)
         script = (
-            f"$f = Get-ChildItem -LiteralPath '{d}' -Recurse -Filter '{name}*.asc' | "
+            f"$f = Get-ChildItem -LiteralPath {paths} -Recurse -Filter '{name}*.asc' -ErrorAction SilentlyContinue | "
             "Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
             "if ($f) { $f.FullName; [Convert]::ToBase64String([IO.File]::ReadAllBytes($f.FullName)) } "
             "else { 'NOTFOUND' }"

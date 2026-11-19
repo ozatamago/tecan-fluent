@@ -59,7 +59,9 @@ def parse_asc(text: str) -> AscResult:
             i += 1
         if len(numbers) != 96:
             raise ValueError(f"Could not read 96 well values from the ASC file (got {len(numbers)})")
-        grids.append({f"{ROWS[k // 12]}{k % 12 + 1}": v for k, v in enumerate(numbers)})
+        # The list form runs down the columns (A1, B1, ..., H1, A2, ...): on 2026-11-19 blue ink in rows B, D, F of
+        # columns 2, 4, 6, 8 (Abs600.mth) read high exactly at those wells only in this order
+        grids.append({f"{ROWS[k % 8]}{k // 8 + 1}": v for k, v in enumerate(numbers)})
     if not labels or len(labels) != len(grids):
         labels = [f"Label{k + 1}" for k in range(len(grids))]
     return AscResult(labels, grids, [ln for ln in lines[i:] if ln.strip()])

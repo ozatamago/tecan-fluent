@@ -76,14 +76,20 @@ def test_asc_grid_format_three_labels():
     assert r.metadata[1] == "OFML_ColorMix3.mth"
 
 
-def test_asc_list_format_is_row_major():
-    # 2026-08-13: yellow ink 10/20/50/100 uL in A4-D4. Row-major order matches the recorded OD
-    # 0.0404/0.0422/0.0425/0.0425
-    r = parse_asc((FIX / "asc_list_format.asc").read_text(encoding="latin-1"))
+def test_asc_list_format_runs_down_the_columns():
+    # 2026-11-19 (Abs600.mth): blue ink in B2, D2, F2 / B4, D4, F4 (about 0.30) and B6, D6, F6 / B8, D8, F8 (about
+    # 0.076); water only and empty wells about 0.04. Only the column order (A1, B1, ..., H1, A2) puts them there.
+    r = parse_asc((FIX / "asc_list_format_20261119_blue.asc").read_text(encoding="latin-1"))
     g = r.values[0]
-    assert [g["A4"], g["B4"], g["C4"], g["D4"]] == [0.0404, 0.0422, 0.0425, 0.0425]
+    high = [g[w] for w in ("B2", "D2", "F2", "B4", "D4", "F4")]
+    mid = [g[w] for w in ("B6", "D6", "F6", "B8", "D8", "F8")]
+    assert min(high) > 0.29 and 0.07 < min(mid) and max(mid) < 0.08
+    others = [v for w, v in g.items() if w not in ("B2", "D2", "F2", "B4", "D4", "F4", "B6", "D6", "F6", "B8", "D8", "F8")]
+    assert max(others) < 0.06
     assert r.metadata[1] == "Abs600.mth"
-    assert not any(math.isnan(v) for v in g.values())
+    # the 2026-08-13 file (yellow ink, too pale at 600 nm to show the order) still reads
+    old = parse_asc((FIX / "asc_list_format.asc").read_text(encoding="latin-1")).values[0]
+    assert len(old) == 96 and not any(math.isnan(v) for v in old.values())
 
 
 def test_worktable_plate_follows_the_20260813_route():
@@ -157,3 +163,20 @@ def test_with_the_deck_state_a_plate_off_its_base_is_measured_from_where_it_is()
 def test_without_the_deck_state_a_plate_off_its_base_is_refused():
     seen = _measure_with(_Tracker(deck=None))
     assert "steps" not in seen and "Use ReturnLabware first" in seen["error"]
+
+
+def test_the_result_file_is_also_searched_in_the_method_export_folders():
+    import base64
+
+    calls = []
+    text = (FIX / "asc_list_format_20261119_blue.asc").read_bytes()
+
+    class _Backend:
+        def _ssh_ps(self, cmd):
+            calls.append(cmd)
+            return "C:\\FluentData\\00_A600_Result\\ASC\\riken_x.asc\n" + base64.b64encode(text).decode()
+
+    reader = FluentInfiniteReader(backend=_Backend(), config=InfiniteConfig())
+    path, result = reader._fetch_asc("riken_x", 0)
+    assert "'C:\\Users\\Public\\Documents\\Tecan\\Magellan Pro\\asc','C:\\FluentData'" in calls[0]
+    assert path.endswith("riken_x.asc") and result.values[0]["B2"] > 0.29
