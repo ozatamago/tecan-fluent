@@ -1,0 +1,20 @@
+# Run configuration for the run manager (python -m fluent780_labcode run ... --config this file).
+
+# What happens to the FluentControl run when the workflow fails:
+#   end-run  EndRun once after labcode has stopped, if the open run is still this mission's (the serial script of
+#            2026-11-19 did this)
+#   hold     send nothing and leave the run open for an operator (run management specification 2026-11-14, sec. 3)
+on_failure: end-run
+
+# Cover-site indices for putting lids on (GetCoverSiteIndex("<holder>")).
+#   resolve: ask the UniteLabs FluentControl connector (RuntimeController.ResolveExpression) right before each lid
+#            move, as the serial script did. port: auto finds it on this computer, i.e. labcode runs on the Fluent PC.
+#   static:  fixed indices by holder label; they win over resolve. Read them with ResolveExpression beforehand.
+cover_sites:
+  resolve: { host: 127.0.0.1, port: auto, insecure: true }
+  # static:
+  #   "96 Well Flat_Custom[001]": 1
+
+# labcode pacing: real seconds per environment tick (the environment's durations are in seconds).
+seconds_per_tick: 1.0
+first_plan_max_time: 30

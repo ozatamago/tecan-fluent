@@ -1,0 +1,9 @@
+# Execution document for `lc schedule` (ofplang-schedule SPEC §6.8): where the Workcell Object starts and ends.
+# `lc run` takes the same from the run boundary (colour_water_layout.boundary.yaml); this file is only for planning
+# the workflow without running it.
+interface:
+  inputs:
+    cell: fluent_control.deck
+  outputs:
+    cell: fluent_control.deck
+activities: []

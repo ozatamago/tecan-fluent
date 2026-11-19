@@ -1,0 +1,28 @@
+# Run boundary for colour_water_layout.workflow.yaml: what is on the deck for this run (2026-11-19 layout).
+#
+#   plate B  96 Well Flat_Custom[001]  Nest7mm_Pos[1]      trough  4 Well SBS Trough[001]  Nest7mm_Pos[2]
+#   plate A  96 Well Flat_Custom[002]  CPLC_Flat_Pos[3]    racks   200 ul Nest61mm[4], 50 ul Nest61mm[7]
+#
+# The Workcell's mission_dir is filled in by the run manager (python -m fluent780_labcode run), which opens the
+# FluentControl run and writes the mission directory first; "." here is only a placeholder.
+boundary:
+  inputs:
+    cell: { spot: fluent_control.deck, view: { mission_dir: "." } }
+    plate_a: { view: "96 Well Flat_Custom[002]" }
+    plate_b: { view: "96 Well Flat_Custom[001]" }
+    trough: { view: "4 Well SBS Trough[001]" }
+    rack50: { view: "FCA_ 50ul SBS[001]" }
+    rack200: { view: "FCA_ 200ul SBS[003]" }
+    lid_a: { view: "PlateA_Lid[001]" }
+    lid_a_type: { view: Lid_9mm_Custom }
+    lid_b: { view: "PlateB_Lid[001]" }
+    lid_b_type: { view: Lid_9mm_Custom }
+    lid_trough: { view: "TroughLid[001]" }
+    lid_trough_type: { view: Lid_9mm }
+    lid_rack50: { view: "Rack50_Lid[001]" }
+    lid_rack50_type: { view: Lid_DiTiFCA }
+    lid_rack200: { view: "Rack200_Lid[001]" }
+    lid_rack200_type: { view: Lid_DiTiFCA }
+  outputs:
+    cell: { spot: fluent_control.deck }
+    reading_b: {}
