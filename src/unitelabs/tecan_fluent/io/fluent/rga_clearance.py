@@ -309,6 +309,12 @@ class Snapshot:
         return Snapshot(copy.deepcopy(self.items), self.base, list(self.notes))
 
 
+def cover_parent(location: str) -> str:
+    """The plate whose cover site a location expression names (GetCoverSiteName("plate") -> "plate"), else ""."""
+    m = re.fullmatch(r'GetCoverSiteName\("(.+)"\)', location or "")
+    return m.group(1) if m else ""
+
+
 def snapshot(base_labware: dict, deck_entries: dict | None = None, overlay: dict | None = None) -> Snapshot:
     """What is on the deck: the labware of the base worktable (label -> {"type", "location", "site", "on"}), changed by
     the deck state's entries (io/fluent/deck/state.py) and then by the moves of the open run (overlay: label -> Item,
@@ -329,7 +335,7 @@ def snapshot(base_labware: dict, deck_entries: dict | None = None, overlay: dict
             e.get("type") or (b.type if b else ""),
             e["location"],
             int(e["site"]),
-            b.on if at_base else "",
+            b.on if at_base else cover_parent(e["location"]),  # a lid the deck state keeps on a plate's cover site
             bool(e.get("lid")),
         )
         if label not in base and e.get("base"):
@@ -634,12 +640,11 @@ def _labware_statement(xml: str) -> tuple[str, Item | None] | None:
             location = loc.group(1).strip() if loc else ""
             # A lid added at the cover site of a plate (Location GetCoverSiteName("plate")) stands on that plate,
             # as after an RGA transfer onto it (Destination.onto)
-            under = re.fullmatch(r'GetCoverSiteName\("(.+)"\)', location)
             return label.group(1).strip(), Item(
                 ltype.group(1).strip() if ltype else "",
                 location,
                 int(pos.group(1)) if pos else 0,
-                under.group(1) if under else "",
+                cover_parent(location),
             )
     if "RemoveLabwareDataV1" in xml:
         m = re.search(r"<LabwareName>([^<]*)</LabwareName>", _unescape(xml))

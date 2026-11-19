@@ -408,3 +408,15 @@ def test_a_lid_added_at_the_cover_site_of_a_plate_stands_on_it():
     [r] = rc.check_steps(GEO, snap, [("m", transfer_xml("PlateB_Lid[001]", "HotelMP_Pos", 3))], MARGIN)
     assert r.verdict != "not checked", r.summary()
     assert "on PlateB[001] at Nest7mm_Pos[2]" in r.source and r.verdict == "ok", r.summary()
+
+
+def test_a_lid_the_deck_state_keeps_at_a_cover_site_stands_on_its_plate():
+    """The deck state records a lid moved back onto a plate as GetCoverSiteName("plate") (2026-11-19 simulation run)."""
+    deck = _deck()
+    deck.pop("PlateB_Lid[001]", None)
+    deck["Rack1000[001]"] = {**deck["Rack1000[001]"], "site": 1}
+    entries = {"PlateB_Lid[001]": {"type": "Lid_9mm_Custom", "location": 'GetCoverSiteName("PlateB[001]")', "site": 2}}
+    snap = rc.snapshot(deck, entries)
+    assert snap.items["PlateB_Lid[001]"].on == "PlateB[001]"
+    r = rc.check_transfer(GEO, snap, "PlateB_Lid[001]", rc.Destination("HotelMP_Pos", 3), MARGIN)
+    assert r.verdict == "ok" and "at Nest7mm_Pos[2]" in r.source, r.summary()
