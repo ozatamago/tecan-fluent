@@ -60,7 +60,9 @@ class PlateHandling(sila.Feature):
     async def measure_worktable_plate(self, labware: str, method: str, *, status: sila.Status) -> MeasurementResult:
         """
         Bring a plate that is registered on the FluentControl worktable (by its name) into the reader, measure it,
-        and put it back to its base position - all within one FluentControl run.
+        and put it back where it was - all within one FluentControl run. With the deck state (Deck), the plate can be
+        anywhere the deck state has it (FluentControl gets that position at the start of the run) and goes back
+        there; without it, the plate must be at its base position.
 
         Args:
           Labware: Labware name on the worktable, e.g. "96 Well Flat_Custom[001]".
@@ -70,14 +72,17 @@ class PlateHandling(sila.Feature):
           Result: The measured values and the result file.
         """
         try:
+            back_to = None
             if self.tracker is not None and labware in self.tracker.positions:
                 loc, site = self.tracker.where(labware)
-                raise BackendError(
-                    f"{labware} is currently at {loc}[{site}] (moved by PlateTransfer). Use ReturnLabware first"
-                )
+                if self.tracker.deck is None:  # FluentControl's record may still have it at its base
+                    raise BackendError(
+                        f"{labware} is currently at {loc}[{site}] (moved by PlateTransfer). Use ReturnLabware first"
+                    )
+                back_to = (loc, site)  # registered there at the start of the run: take it from and back to there
             await self.reader.check_method(method)
             name = self.reader._measure_name()
-            steps = self.reader.worktable_plate_steps(labware, method, name)
+            steps = self.reader.worktable_plate_steps(labware, method, name, back_to=back_to)
             path, asc = await with_progress(status, len(steps), lambda report: self.reader.run(steps, name, report))
         except BackendError as exc:
             raise ReaderOperationFailed(str(exc)) from None

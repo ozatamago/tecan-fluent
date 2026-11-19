@@ -102,8 +102,11 @@ class FluentInfiniteReader:
             (f"RemoveLabware {lbl}", remove_labware_xml(lbl)),
         ]
 
-    def worktable_plate_steps(self, labware: str, method: str, name: str) -> list[tuple[str, str]]:
-        """Move a plate registered on the worktable (by name) into the reader, measure it, and return it to its base.
+    def worktable_plate_steps(
+        self, labware: str, method: str, name: str, back_to: tuple[str, int] | None = None
+    ) -> list[tuple[str, str]]:
+        """Move a plate registered on the worktable (by name) into the reader, measure it, and return it to its base,
+        or to back_to (location, site: where the deck state has it, off its base).
 
         Same route as run with the Tecan server's TransferLabware / TransferLabwareBackToBase on 2026-08-13.
         Here the same motions are sent as RGA macros (XML). The move-to-base macro was verified on the device
@@ -127,7 +130,14 @@ class FluentInfiniteReader:
                 f"RGA {labware} -> {c.regrip_location}[{c.regrip_site}]",
                 rga_xml(labware, c.regrip_location, str(c.regrip_site), fixed_site=True),
             ),
-            (f"RGA {labware} -> base", rga_xml(labware, move_to_base=True)),
+            (
+                (f"RGA {labware} -> base", rga_xml(labware, move_to_base=True))
+                if back_to is None
+                else (
+                    f"RGA {labware} -> {back_to[0]}[{back_to[1]}]",
+                    rga_xml(labware, back_to[0], str(back_to[1]), fixed_site=True),
+                )
+            ),
             ("Magellan_Close", magellan_xml("Magellan_Close")),
         ]
 

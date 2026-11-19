@@ -100,3 +100,60 @@ def test_worktable_plate_follows_the_20260813_route():
         "RGA 96 Well Flat_Custom[001] -> base",
         "Magellan_Close",
     ]
+
+
+def test_a_worktable_plate_off_its_base_goes_back_where_it_was():
+    reader = FluentInfiniteReader(backend=None, config=InfiniteConfig())
+    steps = reader.worktable_plate_steps("96 Well Flat_Custom[001]", "OFML_Abs405.mth", "riken_x", ("Nest7mm_Pos", 1))
+    label, xml = steps[-2]
+    assert label == "RGA 96 Well Flat_Custom[001] -> Nest7mm_Pos[1]"
+    assert xml == rga_xml("96 Well Flat_Custom[001]", "Nest7mm_Pos", "1", fixed_site=True)
+
+
+class _Tracker:
+    def __init__(self, deck):
+        self.deck = deck
+        self.positions = {"96 Well Flat_Custom[001]": ["Nest7mm_Pos", 1]}
+
+    def where(self, labware):
+        return tuple(self.positions[labware][:1]) + (int(self.positions[labware][1]),)
+
+
+def _measure_with(tracker):
+    import asyncio
+
+    from unitelabs.tecan_fluent.features.infinite.plate_handling import PlateHandling
+
+    reader = FluentInfiniteReader(backend=None, config=InfiniteConfig())
+    seen = {}
+
+    async def method_found(_method):
+        return None
+
+    async def run(steps, name, report):
+        seen["steps"] = steps
+        raise BackendError("stop here")
+
+    reader.check_method, reader.run = method_found, run
+    feature = PlateHandling(reader, tracker)
+
+    class _Status:
+        def update(self, *a, **k):
+            pass
+
+    try:
+        asyncio.run(feature.measure_worktable_plate("96 Well Flat_Custom[001]", "OFML_Abs405.mth", status=_Status()))
+    except Exception as exc:  # noqa: BLE001 - the error raised by run (or the refusal)
+        seen["error"] = str(exc)
+    return seen
+
+
+def test_with_the_deck_state_a_plate_off_its_base_is_measured_from_where_it_is():
+    seen = _measure_with(_Tracker(deck=object()))
+    assert [label for label, _ in seen["steps"]][-2] == "RGA 96 Well Flat_Custom[001] -> Nest7mm_Pos[1]"
+    assert seen["error"] == "stop here"
+
+
+def test_without_the_deck_state_a_plate_off_its_base_is_refused():
+    seen = _measure_with(_Tracker(deck=None))
+    assert "steps" not in seen and "Use ReturnLabware first" in seen["error"]
