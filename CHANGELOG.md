@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `examples/fluent780_runs/`: serial run scripts for the Fluent 780 with shared helpers (`runlib.py`): the
+  colour-water run-through W01-W21 that ran on the instrument on 2026-11-19 (now switching every temperature back
+  at the end and after a failure: CPLC off, BioShake off, Incubator1 25 C) and the LB contamination check
+  (`day` / `morning`, the run stays open over night).
 - RGA clearance check, second table: every location of the base worktable is in it (61 mm nests with the tip racks
   and their cover sites, CPLC 1-3, the `_PCR` location groups, hotel 1-9, incubators, ODTC, reader), PCR plates and
   lids, `ODTC_Lid`, the short tip racks, the POGO and the Magnum FLX; labware kinds come from the FluentControl type
