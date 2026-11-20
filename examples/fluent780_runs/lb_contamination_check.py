@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 
+import runlib
 from runlib import (
     CPLC_A_SLOT,
     CPLC_POGO_SLOT,
@@ -49,6 +50,7 @@ from runlib import (
     bioshake_settled,
     c,
     conn,
+    drop_mounted_tips,
     hold_factory,
     lid_back,
     lid_to,
@@ -65,8 +67,12 @@ ap = argparse.ArgumentParser()
 ap.add_argument("phase", choices=["day", "morning"])
 ap.add_argument("--scale", type=float, default=1.0)
 ap.add_argument("--precool-min", type=float, default=15.0, help="fixed wait after setting the CPLC slots to 4 C")
+ap.add_argument("--skip-liquid", action="store_true", help="simulation only: no aspirate/dispense/mix (see runlib)")
 args = ap.parse_args()
 SIM = simulation()
+if args.skip_liquid and not SIM:
+    sys.exit("--skip-liquid is for the simulation only")
+runlib.SKIP_LIQUID = args.skip_liquid
 hold = hold_factory(args.scale)
 CAMERA_SHOT = r"C:\Users\Tecan\OFML\tools\camera_shot.ps1"  # deck camera snapshot script on the Fluent PC
 log(f"FluentControl {'SIMULATION' if SIM else 'REAL'} | phase {args.phase} | wait scale {args.scale}")
@@ -184,6 +190,7 @@ def end_on_failure():
             return
         cplc_bioshake_off()
         off("Incubator1 -> 25 C", lambda: c.Incubator1.SetTemperature(25.0))
+        drop_mounted_tips()
         try:
             wait(c.RunControl.EndRun(), "EndRun (after a failure)")
         except SystemExit:

@@ -51,6 +51,10 @@ TT = {50: ("FCA, 50ul SBS", R50), 200: ("FCA, 200ul SBS", R200), 1000: ("FCA, 10
 S, MULTI, MIX = "Water Free Single", "Water Free Multi", "Water Mix"  # Air FCA liquid classes
 CPLC_POGO_SLOT, CPLC_A_SLOT = 1, 3
 
+# Simulation only: the simulated FluentControl cannot aspirate from the tubes ("argument out of range: height", no
+# liquid level). With this set, xfer() and multi() still take and drop the tips but send no aspirate/dispense/mix.
+SKIP_LIQUID = False
+
 
 def log(msg: str) -> None:
     print(time.strftime("%H:%M:%S"), msg, flush=True)
@@ -167,10 +171,12 @@ def xfer(tip, src, sw, vol, dst, dw, lc=S, mix=None, label=""):
         nxt = next_tip(rack) or "A1"
         wait(c.LiquidHandling.SetNextTipPosition(rack, nxt), f"SetNextTipPosition {rack} {nxt}")
     wait(c.LiquidHandling.GetTips(typ, [1], rack), f"GetTips {tip} from {rack}")
-    if src is not None:
+    if SKIP_LIQUID:
+        log(f"SIMULATION: liquid skipped ({vol} {src} {sw} -> {dst} {dw}, mix {mix})")
+    elif src is not None:
         wait(c.LiquidHandling.Aspirate(src, [sw], [vol], lc, [1]), f"Aspirate {vol} {src} {sw} ({lc})")
         wait(c.LiquidHandling.Dispense(dst, [dw], [vol], lc, [1]), f"Dispense {vol} {dst} {dw}")
-    if mix:
+    if mix and not SKIP_LIQUID:
         wait(c.LiquidHandling.Mix(dst, [dw], [mix[0]], MIX, [1], mix[1]), f"Mix {mix[0]}x{mix[1]} {dst} {dw}")
     wait(c.LiquidHandling.DropTips([1]), "DropTips")
 
@@ -189,17 +195,27 @@ def multi(tip, src, src_well, vol, dst, dst_wells, lc=S, mix=None, label=""):
         ch = list(range(1, k + 1))
         print("==", label, wells, flush=True)
         wait(c.LiquidHandling.GetTips(typ, ch, rack), f"GetTips {tip} ch{ch} from {rack}")
-        if src is not None:
+        if SKIP_LIQUID:
+            log(f"SIMULATION: liquid skipped ({vol} x{k} {src} {src_well} -> {dst} {wells}, mix {mix})")
+        elif src is not None:
             wait(
                 c.LiquidHandling.Aspirate(src, [src_well] * k, [vol] * k, lc, ch),
                 f"Aspirate {vol} x{k} {src} {src_well} ({lc})",
             )
             wait(c.LiquidHandling.Dispense(dst, wells, [vol] * k, lc, ch), f"Dispense {vol} {dst} {wells}")
-        if mix:
+        if mix and not SKIP_LIQUID:
             wait(
                 c.LiquidHandling.Mix(dst, wells, [mix[0]] * k, MIX, ch, mix[1]), f"Mix {mix[0]}x{mix[1]} {dst} {wells}"
             )
         wait(c.LiquidHandling.DropTips(ch), f"DropTips ch{ch}")
+
+
+def drop_mounted_tips():
+    """Drop whatever tips are still mounted (after a failure), so that the run can be ended."""
+    try:
+        wait(c.LiquidHandling.DropTips(list(range(1, 9))), "DropTips (cleanup)")
+    except SystemExit:
+        log("cleanup: DropTips failed or no tips mounted")
 
 
 def lid_to(lid, loc, site):
