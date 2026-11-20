@@ -4,7 +4,8 @@ The scripts send one step at a time to the "Tecan Fluent 780 (All devices)" SiLA
 stop at the first failure. They run on the Fluent PC, next to FluentControl and the UniteLabs FluentControl connector.
 
 Environment:
-  FLUENT_SILA_HOST  host of the fluent780_all server (default 127.0.0.1)
+  FLUENT_SILA_HOST  host of the fluent780_all server (default: 127.0.0.1, then this PC's own IPv4 addresses, since
+                    the server may listen on the PC's network address only)
   FLUENT_SILA_PORT  its port (default 50060)
 
 Names below are the labware labels of the worktable WT2411004293_Ver.0.5_OFML and the deck state of 2026-11-19/20.
@@ -12,15 +13,29 @@ Names below are the labware labels of the worktable WT2411004293_Ver.0.5_OFML an
 
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
 
 from sila2.client import SilaClient
 
-HOST = os.environ.get("FLUENT_SILA_HOST", "127.0.0.1")
 PORT = int(os.environ.get("FLUENT_SILA_PORT", "50060"))
-c = SilaClient(HOST, PORT, insecure=True)
+
+
+def _client() -> SilaClient:
+    if os.environ.get("FLUENT_SILA_HOST"):
+        return SilaClient(os.environ["FLUENT_SILA_HOST"], PORT, insecure=True)
+    hosts = ["127.0.0.1"] + [h for h in socket.gethostbyname_ex(socket.gethostname())[2] if not h.startswith("127.")]
+    for host in hosts:
+        try:
+            return SilaClient(host, PORT, insecure=True)
+        except Exception:
+            continue
+    sys.exit(f"no fluent780_all server on port {PORT} at {hosts}; set FLUENT_SILA_HOST")
+
+
+c = _client()
 
 # labware labels
 A, B, TR = "96 Well Flat_Custom[002]", "96 Well Flat_Custom[001]", "4 Well SBS Trough[001]"
