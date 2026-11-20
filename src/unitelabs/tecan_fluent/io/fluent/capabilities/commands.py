@@ -53,7 +53,16 @@ def describe(features) -> list[dict]:
                 if p.name in SKIP_PARAMETERS or p.kind in (p.VAR_KEYWORD, p.VAR_POSITIONAL):
                     continue
                 identifier = _pascal(p.name)
-                parameters.append({"name": identifier, "type": _type_name(p.annotation), "doc": args.get(identifier, "")})
-            out.append({"feature": fqi, "command": _pascal(name), "observable": kind.startswith("Observable"),
-                        "description": description, "parameters": parameters})
+                parameters.append(
+                    {"name": identifier, "type": _type_name(p.annotation), "doc": args.get(identifier, "")}
+                )
+            out.append(
+                {
+                    "feature": fqi,
+                    "command": _pascal(name),
+                    "observable": kind.startswith("Observable"),
+                    "description": description,
+                    "parameters": parameters,
+                }
+            )
     return out

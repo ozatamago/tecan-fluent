@@ -35,8 +35,18 @@ ARM_PART = "AirFca"
 GRIPPER_ARM = "CGA 1"
 """The RGA of this instrument (driver CGA:1, call name "RGA 1")."""
 # Location groups that are frame parts, grids and pins rather than places for labware
-STRUCTURE = ("deviceSite", "WorktablePin", "SideSegment", "BackExtension", "WorktableGrids", "Dummy", "Plexiglas",
-             "SideExtension", "FrameWall", "SideFrameWall")
+STRUCTURE = (
+    "deviceSite",
+    "WorktablePin",
+    "SideSegment",
+    "BackExtension",
+    "WorktableGrids",
+    "Dummy",
+    "Plexiglas",
+    "SideExtension",
+    "FrameWall",
+    "SideFrameWall",
+)
 XSI_TYPE = "{http://www.w3.org/2001/XMLSchema-instance}type"
 
 
@@ -159,8 +169,12 @@ def read_site(path: pathlib.Path) -> SiteTemplate | None:
     paths = {}
     for kv in _items(_child(t, "RobotPaths")):
         paths[_text(kv, "Key")] = [_text(p, "Name") for p in _items(_child(kv, "Value"))]
-    return SiteTemplate(guid=_text(t, "GUID") or path.stem, location=_text(t, "LocationGroupName"),
-                        gripper_paths=[p for p in paths.get(GRIPPER_ARM, []) if p], connectors=_connectors(root))
+    return SiteTemplate(
+        guid=_text(t, "GUID") or path.stem,
+        location=_text(t, "LocationGroupName"),
+        gripper_paths=[p for p in paths.get(GRIPPER_ARM, []) if p],
+        connectors=_connectors(root),
+    )
 
 
 def read_component(path: pathlib.Path) -> Component | None:
@@ -169,21 +183,31 @@ def read_component(path: pathlib.Path) -> Component | None:
     name = _text(_child(root, "Payload"), "ObjectName")
     if t is None:
         return None
-    comp = Component(guid=_text(t, "GUID") or path.stem, name=name, group=_text(t, "FunctionalGroup"),
-                     attributes=_attributes(t), connectors=_connectors(root),
-                     height_mm=_number(_text(_child(t, "Dimension"), "Z")), is_lid=_text(t, "IsLid") == "true")
+    comp = Component(
+        guid=_text(t, "GUID") or path.stem,
+        name=name,
+        group=_text(t, "FunctionalGroup"),
+        attributes=_attributes(t),
+        connectors=_connectors(root),
+        height_mm=_number(_text(_child(t, "Dimension"), "Z")),
+        is_lid=_text(t, "IsLid") == "true",
+    )
     for arrangement in _items(_child(t, "Arrangements")):
         modes = {}
         for kv in _items(_child(arrangement, "AllowedGripModes")):
-            per_arm = {_text(a, "Key"): [m.text for m in _items(_child(a, "Value"))] for a in _items(_child(kv, "Value"))}
+            per_arm = {
+                _text(a, "Key"): [m.text for m in _items(_child(a, "Value"))] for a in _items(_child(kv, "Value"))
+            }
             modes[int(_text(kv, "Key") or 0)] = per_arm.get(GRIPPER_ARM)
         comp.grip_modes.append(modes)
     pip = _child(t, "Pipettable")
     if pip is not None and len(pip):
         cavities = [c for c in pip.iter() if _tag(c) == "Cavity"]
-        comp.wells = {"columns": int(_number(_text(pip, "XNumberOfWells")) or 0),
-                      "rows": int(_number(_text(pip, "YNumberOfWells")) or 0),
-                      "well_volume_ul": _well_volume_ul(cavities[0]) if cavities else None}
+        comp.wells = {
+            "columns": int(_number(_text(pip, "XNumberOfWells")) or 0),
+            "rows": int(_number(_text(pip, "YNumberOfWells")) or 0),
+            "well_volume_ul": _well_volume_ul(cavities[0]) if cavities else None,
+        }
     return comp
 
 
@@ -210,8 +234,10 @@ def read_liquid_class(path: pathlib.Path) -> LiquidClass | None:
             m = re.search(r"AdjustAccuracy\(\s*volume\s*,([^)]*)\)", correction)
             points = [float(x) for x in m.group(1).split(",") if x.strip()][0::2] if m else []
             groups[_text(e, "DiTiTypeGroup") or "default"] = {
-                "min_ul": min(points) if points else None, "max_ul": max(points) if points else None,
-                "multi_dispense": _text(e, "IsMultiPipette") == "true"}
+                "min_ul": min(points) if points else None,
+                "max_ul": max(points) if points else None,
+                "multi_dispense": _text(e, "IsMultiPipette") == "true",
+            }
     return LiquidClass(name=name, air_fca=ARM_PART in parts, tip_groups=groups)
 
 
@@ -245,8 +271,10 @@ class Capabilities:
 
     def labware_types(self, used_only: bool = True) -> list[Component]:
         used = {name for p in self.places for name in p.accepts} | {p.labware_type for p in self.places}
-        return sorted((c for c in self.components.values() if c.is_labware and (not used_only or c.name in used)),
-                      key=lambda c: c.name)
+        return sorted(
+            (c for c in self.components.values() if c.is_labware and (not used_only or c.name in used)),
+            key=lambda c: c.name,
+        )
 
     def tip_types(self) -> list[Component]:
         return [c for c in self.labware_types(used_only=False) if c.group == "Labware.FCA DiTi"]
@@ -271,19 +299,36 @@ def _walk(frame, sites: dict[str, SiteTemplate], comps: dict[str, Component], ow
                     child_label = names[0] if names else None
                     child_guid = _text(connected, "CarrierOrLabwareTemplateGUID")
                 if site and location and not location.startswith(STRUCTURE) and "FrameWall" not in location:
-                    accepts = sorted({comps[g].name for k in site.connectors for g in owners.get(k, ())
-                                      if g in comps and comps[g].is_labware})
+                    accepts = sorted(
+                        {
+                            comps[g].name
+                            for k in site.connectors
+                            for g in owners.get(k, ())
+                            if g in comps and comps[g].is_labware
+                        }
+                    )
                     parent = comps.get(comp_guid)
                     allowed = None
                     if parent and ai < len(parent.grip_modes):
                         allowed = parent.grip_modes[ai].get(index)
                     modes = [m for m in site.gripper_paths if allowed is None or m in allowed]
                     access = [comps[g].attributes.get("ACCESSIBLE_FOR_LIHA") for g in chain if g in comps]
-                    pipetting = None if any(a not in ("true", "false") for a in access) else all(a == "true" for a in access)
-                    places.append(Place(location=location, site=counts[location], parent=label or "",
-                                        parent_type=parent.name if parent else "", labware=child_label,
-                                        labware_type=comps[child_guid].name if child_guid in comps else None,
-                                        accepts=accepts, gripper_modes=modes, pipetting=pipetting))
+                    pipetting = (
+                        None if any(a not in ("true", "false") for a in access) else all(a == "true" for a in access)
+                    )
+                    places.append(
+                        Place(
+                            location=location,
+                            site=counts[location],
+                            parent=label or "",
+                            parent_type=parent.name if parent else "",
+                            labware=child_label,
+                            labware_type=comps[child_guid].name if child_guid in comps else None,
+                            accepts=accepts,
+                            gripper_modes=modes,
+                            pipetting=pipetting,
+                        )
+                    )
                 if child_guid:
                     walk(connected, child_label, child_guid, chain + [child_guid])
 
@@ -320,5 +365,11 @@ def load(database_root: str | pathlib.Path, worktable: str) -> Capabilities:
                 m = re.search(rf"<{key}>([^<]*)</{key}>", text)
                 if m:
                     rga[key] = m.group(1)
-    return Capabilities(database=str(root), worktable=worktable, places=places, components=comps,
-                        liquid_classes=sorted(classes, key=lambda c: c.name), rga_settings=rga)
+    return Capabilities(
+        database=str(root),
+        worktable=worktable,
+        places=places,
+        components=comps,
+        liquid_classes=sorted(classes, key=lambda c: c.name),
+        rga_settings=rga,
+    )

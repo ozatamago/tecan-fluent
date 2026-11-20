@@ -211,8 +211,13 @@ class LabCapabilities(sila.Feature):
     JSON document for planning tools.
     """
 
-    def __init__(self, config: CapabilitiesConfig, backend: FluentControlBackend, deck: DeckState | None,
-                 features: list[sila.Feature]):
+    def __init__(
+        self,
+        config: CapabilitiesConfig,
+        backend: FluentControlBackend,
+        deck: DeckState | None,
+        features: list[sila.Feature],
+    ):
         super().__init__(
             originator="jp.riken.bdr",
             category="tecan.fluent",
@@ -238,21 +243,36 @@ class LabCapabilities(sila.Feature):
         return caps
 
     def _places(self, caps: database.Capabilities) -> list[PlaceInfo]:
-        return [PlaceInfo(location=p.location, site=p.site, carrier=p.parent,
-                          labware=f"{p.labware_type} {p.labware}" if p.labware else "", accepts=p.accepts,
-                          gripper_modes=p.gripper_modes,
-                          pipetting={True: "yes", False: "no", None: "unknown"}[p.pipetting])
-                for p in caps.places]
+        return [
+            PlaceInfo(
+                location=p.location,
+                site=p.site,
+                carrier=p.parent,
+                labware=f"{p.labware_type} {p.labware}" if p.labware else "",
+                accepts=p.accepts,
+                gripper_modes=p.gripper_modes,
+                pipetting={True: "yes", False: "no", None: "unknown"}[p.pipetting],
+            )
+            for p in caps.places
+        ]
 
     def _labware(self, caps: database.Capabilities) -> list[LabwareTypeInfo]:
         out = []
         for c in caps.labware_types():
             wells = c.wells or {}
-            out.append(LabwareTypeInfo(
-                name=c.name, kind=c.group.removeprefix("Labware."), columns=wells.get("columns", 0),
-                rows=wells.get("rows", 0), height_mm=c.height_mm or 0.0, well_volume_ul=wells.get("well_volume_ul") or 0.0,
-                grip_narrow_mm=_float(c.attributes.get("Grip_Narrow")), grip_wide_mm=_float(c.attributes.get("Grip_Wide")),
-                grip_force=_float(c.attributes.get("Force"))))
+            out.append(
+                LabwareTypeInfo(
+                    name=c.name,
+                    kind=c.group.removeprefix("Labware."),
+                    columns=wells.get("columns", 0),
+                    rows=wells.get("rows", 0),
+                    height_mm=c.height_mm or 0.0,
+                    well_volume_ul=wells.get("well_volume_ul") or 0.0,
+                    grip_narrow_mm=_float(c.attributes.get("Grip_Narrow")),
+                    grip_wide_mm=_float(c.attributes.get("Grip_Wide")),
+                    grip_force=_float(c.attributes.get("Force")),
+                )
+            )
         return out
 
     def _tips(self, caps: database.Capabilities) -> list[TipTypeInfo]:
@@ -260,21 +280,41 @@ class LabCapabilities(sila.Feature):
         for p in caps.places:
             if p.labware_type:
                 racks.setdefault(p.labware_type, []).append(f"{p.labware} at {p.location}[{p.site}]")
-        return [TipTypeInfo(name=c.name, tip_group=c.attributes.get("DiTiTypeGroup", ""),
-                            capacity_ul=_float(c.attributes.get("TipCapacity")),
-                            filtered=c.attributes.get("Filter", "").lower() == "true", racks=racks.get(c.name, []))
-                for c in caps.tip_types()]
+        return [
+            TipTypeInfo(
+                name=c.name,
+                tip_group=c.attributes.get("DiTiTypeGroup", ""),
+                capacity_ul=_float(c.attributes.get("TipCapacity")),
+                filtered=c.attributes.get("Filter", "").lower() == "true",
+                racks=racks.get(c.name, []),
+            )
+            for c in caps.tip_types()
+        ]
 
     def _instruments(self, caps: database.Capabilities) -> list[InstrumentInfo]:
         present = {p.parent_type for p in caps.places} | {p.labware_type for p in caps.places}
-        return [InstrumentInfo(name=i["name"], kind=i["kind"], on_worktable=i["part"] in present,
-                               locations=i["locations"], driver=i["driver"], connection=i["connection"],
-                               servers=i["servers"], features=i["features"]) for i in catalog.INSTRUMENTS]
+        return [
+            InstrumentInfo(
+                name=i["name"],
+                kind=i["kind"],
+                on_worktable=i["part"] in present,
+                locations=i["locations"],
+                driver=i["driver"],
+                connection=i["connection"],
+                servers=i["servers"],
+                features=i["features"],
+            )
+            for i in catalog.INSTRUMENTS
+        ]
 
     def _state(self) -> dict:
-        state = {"read_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "busy": self.backend.busy,
-                 "current_operation": self.backend.current_operation, "run_open": self.backend.run_open,
-                 "other_server": self.backend.other_server() or ""}
+        state = {
+            "read_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "busy": self.backend.busy,
+            "current_operation": self.backend.current_operation,
+            "run_open": self.backend.run_open,
+            "other_server": self.backend.other_server() or "",
+        }
         if self.deck is not None:
             try:
                 state["deck"] = self.deck.load()
@@ -300,14 +340,19 @@ class LabCapabilities(sila.Feature):
     @sila.UnobservableProperty(errors=[DatabaseUnavailable])
     async def get_liquid_classes(self) -> list[LiquidClassInfo]:
         """Liquid classes, whether they work on the Air FCA arm, and their volume range per tip group."""
-        return [LiquidClassInfo(name=lc.name, air_fca=lc.air_fca,
-                                tip_groups=[_range(g, r) for g, r in sorted(lc.tip_groups.items())])
-                for lc in (await self._load()).liquid_classes]
+        return [
+            LiquidClassInfo(
+                name=lc.name, air_fca=lc.air_fca, tip_groups=[_range(g, r) for g, r in sorted(lc.tip_groups.items())]
+            )
+            for lc in (await self._load()).liquid_classes
+        ]
 
     @sila.UnobservableProperty()
     async def get_arms(self) -> list[str]:
         """The arms of the instrument, as "<name> (<kind>, <channels> channel(s)): <facts>"."""
-        return [f"{a['name']} ({a['kind']}, {a['channels']} channel(s)): " + "; ".join(a["facts"]) for a in catalog.ARMS]
+        return [
+            f"{a['name']} ({a['kind']}, {a['channels']} channel(s)): " + "; ".join(a["facts"]) for a in catalog.ARMS
+        ]
 
     @sila.UnobservableProperty(errors=[DatabaseUnavailable])
     async def get_instruments(self) -> list[InstrumentInfo]:
@@ -317,9 +362,15 @@ class LabCapabilities(sila.Feature):
     @sila.UnobservableProperty()
     async def get_commands(self) -> list[CommandInfo]:
         """The SiLA commands this server offers, with their parameters (from the features themselves)."""
-        return [CommandInfo(feature=c["feature"], command=c["command"], description=c["description"],
-                            parameters=[f"{p['name']} ({p['type']}): {p['doc']}".rstrip(": ") for p in c["parameters"]])
-                for c in commands.describe(self.features)]
+        return [
+            CommandInfo(
+                feature=c["feature"],
+                command=c["command"],
+                description=c["description"],
+                parameters=[f"{p['name']} ({p['type']}): {p['doc']}".rstrip(": ") for p in c["parameters"]],
+            )
+            for c in commands.describe(self.features)
+        ]
 
     @sila.UnobservableProperty()
     async def get_constraints(self) -> list[ConstraintInfo]:

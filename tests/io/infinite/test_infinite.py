@@ -84,7 +84,9 @@ def test_asc_list_format_runs_down_the_columns():
     high = [g[w] for w in ("B2", "D2", "F2", "B4", "D4", "F4")]
     mid = [g[w] for w in ("B6", "D6", "F6", "B8", "D8", "F8")]
     assert min(high) > 0.29 and 0.07 < min(mid) and max(mid) < 0.08
-    others = [v for w, v in g.items() if w not in ("B2", "D2", "F2", "B4", "D4", "F4", "B6", "D6", "F6", "B8", "D8", "F8")]
+    others = [
+        v for w, v in g.items() if w not in ("B2", "D2", "F2", "B4", "D4", "F4", "B6", "D6", "F6", "B8", "D8", "F8")
+    ]
     assert max(others) < 0.06
     assert r.metadata[1] == "Abs600.mth"
     # the 2026-08-13 file (yellow ink, too pale at 600 nm to show the order) still reads

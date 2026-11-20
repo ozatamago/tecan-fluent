@@ -17,7 +17,11 @@ def _place(caps, location, site):
 def test_places_of_the_worktable():
     caps = database.load(DB, "Test WT")
     assert [(p.location, p.site) for p in caps.places] == [
-        ("Nest_Pos", 1), ("Nest_Pos", 2), ("Nest_Pos_PCR", 1), ("Hotel_Pos", 1)]  # grids are left out
+        ("Nest_Pos", 1),
+        ("Nest_Pos", 2),
+        ("Nest_Pos_PCR", 1),
+        ("Hotel_Pos", 1),
+    ]  # grids are left out
 
     tips = _place(caps, "Nest_Pos", 1)
     assert tips.parent == "Test Nest[001]" and tips.parent_type == "Test Nest"
@@ -47,9 +51,13 @@ def test_labware_tips_liquid_classes_and_rga():
     classes = {lc.name: lc for lc in caps.liquid_classes}
     water = classes["Test Water Single"]
     assert water.air_fca and water.tip_groups == {
-        "FCA DiTi 200µl": {"min_ul": 2.0, "max_ul": 200.0, "multi_dispense": False}}  # the Fca part is ignored
+        "FCA DiTi 200µl": {"min_ul": 2.0, "max_ul": 200.0, "multi_dispense": False}
+    }  # the Fca part is ignored
     assert classes["Test Water Multi"].tip_groups["FCA DiTi 200µl"] == {
-        "min_ul": None, "max_ul": None, "multi_dispense": True}
+        "min_ul": None,
+        "max_ul": None,
+        "multi_dispense": True,
+    }
     assert not classes["Test Wash"].air_fca and classes["Test Wash"].tip_groups == {}
     assert caps.rga_settings == {"GripDetection": "1", "RegripStation": "Regrip_Test", "Force": "20", "Speed": "80"}
 

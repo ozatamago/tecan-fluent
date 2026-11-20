@@ -34,7 +34,12 @@ def test_places_labware_tips_and_liquid_classes():
         assert set(labware) == {"FCA, 200ul SBS", "Test PCR 96", "Test Plate 96"}
         plate = labware["Test Plate 96"]
         assert (plate.kind, plate.columns, plate.rows, plate.grip_narrow_mm, plate.grip_force) == (
-            "Microplate", 12, 8, 85.5, 20.0)
+            "Microplate",
+            12,
+            8,
+            85.5,
+            20.0,
+        )
 
         (tip,) = await f.get_tip_types()
         assert (tip.tip_group, tip.capacity_ul, tip.filtered) == ("FCA DiTi 200µl", 220.0, False)

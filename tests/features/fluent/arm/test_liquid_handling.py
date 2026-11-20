@@ -372,7 +372,9 @@ def test_several_tips_are_marked_in_one_set_available_tips():
     one = set_next_tip_position_xml("R[001]", "C1")
     assert "<int>2</int>" in one and "<SelectedWellsString>C1</SelectedWellsString>" in one
     three = set_next_tip_position_xml("R[001]", ["G4", "H4", "A5"])
-    assert three.count("<int>") == 3 and "<int>30</int>" in three and "<int>31</int>" in three and "<int>32</int>" in three
+    assert (
+        three.count("<int>") == 3 and "<int>30</int>" in three and "<int>31</int>" in three and "<int>32</int>" in three
+    )
     assert "<SelectedWellsString>G4 - A5</SelectedWellsString>" in three  # consecutive indexes: the GUI's range form
     assert "<SelectedWellsString>A9, C9</SelectedWellsString>" in set_next_tip_position_xml("R[001]", ["A9", "C9"])
     assert tip_wells_from("F4", 3) == ["F4", "G4", "H4"]
