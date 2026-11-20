@@ -138,7 +138,22 @@ def a_to(loc, site):
 def measure_b(tag):
     """B lid to the hotel, Abs600 of all 96 wells (B goes to the reader through Regrip and back), lid back."""
     lid_to("PlateB_Lid[001]", "HotelMP_Pos", 3)
-    r = wait(c.PlateHandling.MeasureWorktablePlate(B, "Abs600.mth"), f"reader Abs600 ({tag})", limit=900)
+    inst = c.PlateHandling.MeasureWorktablePlate(B, "Abs600.mth")
+    t0 = time.time()
+    while not inst.done:
+        if time.time() - t0 > 900:
+            sys.exit(f"reader Abs600 ({tag}) still running after 900 s")
+        time.sleep(0.5)
+    try:
+        r = inst.get_responses()
+        log(f"reader Abs600 ({tag}) done {time.time() - t0:.0f}s")
+    except Exception as e:
+        if SIM and "Result file" in str(e):  # the simulated reader writes no result file; the transfers did run
+            log(f"SIMULATION: reader Abs600 ({tag}) moved B, no result file: {str(e)[:160]}")
+            lid_back(u, "PlateB_Lid[001]", B)
+            return
+        log(f"reader Abs600 ({tag}) ERROR {str(e)[:400]}")
+        sys.exit(1)
     try:
         vals = {v.Well: v.Value for v in r.Result.Values}
         log(f"Abs600 {tag}: " + ", ".join(f"{w}={vals.get(w)}" for w in ["A1", "B2", "D2", "F2", "B6", "B8", "H12"]))
