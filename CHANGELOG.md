@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `examples/fluent780_runs/transformation_liquid_lb.py`: the transformation protocol with liquid LB culture on the
+  Fluent 780 (ampicillin lane, Abs600 and GFP fluorescence before and after the overnight culture).
 - `examples/fluent780_runs/`: serial run scripts for the Fluent 780 with shared helpers (`runlib.py`): the
   colour-water run-through W01-W21 that ran on the instrument on 2026-11-19 (now switching every temperature back
   at the end and after a failure: CPLC off, BioShake off, Incubator1 25 C) and the LB contamination check
